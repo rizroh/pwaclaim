@@ -10,6 +10,7 @@ import { saveExpenses } from '../services/storage.js';
 import { compressImage } from '../utils.js';
 import { performLocalOCR } from '../services/ocr.js';
 import { analyzeMultipleReceipts } from '../services/gemini.js';
+import { analyzeMultipleWithGrok } from '../services/grok.js';
 
 const MAX_IMAGES = 10;
 let cameraStream = null;
@@ -52,6 +53,9 @@ export function renderAddExpense(container) {
         </button>
         <button id="btn-gemini" class="w-full hidden items-center justify-center gap-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition text-white py-3 rounded-2xl disabled:opacity-60">
           ✨ Gemini AI 分析
+        </button>
+        <button id="btn-grok" class="w-full hidden items-center justify-center gap-2 text-sm font-medium bg-black hover:bg-slate-800 active:scale-[0.98] transition text-white py-3 rounded-2xl disabled:opacity-60">
+          🚀 Grok Vision 分析
         </button>
         <p id="ocr-note" class="hidden text-center text-[10px] text-emerald-600 mt-1">首次使用會下載語言模型，需時約 15-40 秒</p>
       </div>
@@ -134,6 +138,7 @@ export function renderAddExpense(container) {
   document.getElementById('btn-close-camera')?.addEventListener('click', stopCamera);
   document.getElementById('btn-ocr')?.addEventListener('click', runOCR);
   document.getElementById('btn-gemini')?.addEventListener('click', runGemini);
+  document.getElementById('btn-grok')?.addEventListener('click', runGrok);
   document.getElementById('btn-save')?.addEventListener('click', save);
 
   // Default date
@@ -243,7 +248,7 @@ function renderPreviews() {
 
   // Toggle AI buttons
   const hasImages = state.currentImages.length > 0;
-  ['btn-ocr', 'btn-gemini'].forEach(id => {
+  ['btn-ocr', 'btn-gemini', 'btn-grok'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) {
       if (hasImages) {
@@ -311,6 +316,41 @@ async function runGemini() {
     showToast(msg, 'info');
   } catch (err) {
     showToast('分析失敗: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+async function runGrok() {
+  if (state.currentImages.length === 0) return;
+  const btn = document.getElementById('btn-grok');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+
+  try {
+    const result = await analyzeMultipleWithGrok(state.currentImages, (current, total) => {
+      btn.innerHTML = `Grok 分析中 ${current}/${total}...`;
+    });
+
+    if (result.failCount > 0) {
+      state.currentImages = result.successIndices.map(i => state.currentImages[i]);
+      renderPreviews();
+    }
+
+    document.getElementById('f-amount').value = result.amount.toFixed(2);
+    if (result.date) document.getElementById('f-date').value = result.date;
+    if (result.vendor) document.getElementById('f-vendor').value = result.vendor;
+    if (result.category) document.getElementById('f-category').value = result.category;
+    if (result.notes) document.getElementById('f-notes').value = result.notes;
+
+    let msg = `Grok 完成！成功 ${result.successCount} 張，總金額 HK$${result.amount.toFixed(2)}`;
+    if (result.failCount > 0) {
+      msg += `｜已抽走 ${result.failCount} 張失敗相`;
+    }
+    showToast(msg, 'info');
+  } catch (err) {
+    showToast('Grok 分析失敗: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = original;
