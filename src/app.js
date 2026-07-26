@@ -167,17 +167,32 @@ function handleAuthCallback() {
     
     // Clean URL
     window.history.replaceState({}, '', window.location.pathname);
-    
     showToast(`已登入：${name || 'Grok 用戶'}`, 'success');
-    
-    // Update UI
+  }
+
+  // Always restore UI from localStorage (works on normal page load too)
+  const savedToken = localStorage.getItem('grok_token');
+  const savedName = localStorage.getItem('grok_name') || 'Grok';
+  
+  if (savedToken) {
     const badge = document.getElementById('auth-badge');
     const status = document.getElementById('auth-status');
+    const btn = document.getElementById('auth-btn');
+    
     if (badge) {
       badge.classList.remove('hidden');
-      document.getElementById('auth-name').textContent = name || 'Grok';
+      const nameEl = document.getElementById('auth-name');
+      if (nameEl) nameEl.textContent = savedName;
     }
-    if (status) status.textContent = `✅ ${name || '已連接'}`;
+    if (status) status.textContent = `✅ ${savedName}`;
+    if (btn) {
+      btn.textContent = '登出';
+      btn.onclick = () => {
+        localStorage.removeItem('grok_token');
+        localStorage.removeItem('grok_name');
+        location.reload();
+      };
+    }
   }
 }
 
