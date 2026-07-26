@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       'gemini-flash-latest'
     ];
     
-    let model = allowedModels.includes(requestedModel) ? requestedModel : 'gemini-3.6-flash';
+    let model = allowedModels.includes(requestedModel) ? requestedModel : 'gemini-3.5-flash-lite';
 
     if (!apiKey) {
       return res.status(500).json({
