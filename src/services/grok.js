@@ -1,15 +1,20 @@
 /**
  * Grok (xAI) Vision Service
+ * Prefers SuperGrok OAuth access_token, then user API key, then system key
  */
 
 import { showToast } from '../ui/toast.js';
 
-export async function analyzeReceiptWithGrok(imageBase64, userApiKey = '', model = 'grok-2-vision-latest') {
+export async function analyzeReceiptWithGrok(imageBase64, model = 'grok-2-vision-latest') {
+  const userAccessToken = localStorage.getItem('grok_token') || '';
+  const userApiKey = localStorage.getItem('user_xai_api_key') || '';
+
   const res = await fetch('/api/grok-vision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       imageBase64,
+      userAccessToken,
       userApiKey,
       model
     })
@@ -17,18 +22,20 @@ export async function analyzeReceiptWithGrok(imageBase64, userApiKey = '', model
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
-    const modelInfo = data.modelUsed ? ` [${data.modelUsed}]` : '';
+    const msg = data.error || data.details || ('HTTP ' + res.status);
+    const modelInfo = data.modelUsed ? (' [' + data.modelUsed + ']') : '';
     throw new Error(msg + modelInfo);
   }
   return data.data;
 }
 
-/**
- * Analyze multiple images with Grok Vision
- */
 export async function analyzeMultipleWithGrok(images, onProgress) {
-  const userKey = localStorage.getItem('user_xai_api_key') || '';
+  const hasToken = !!localStorage.getItem('grok_token');
+  const hasKey = !!localStorage.getItem('user_xai_api_key');
+  if (!hasToken && !hasKey) {
+    throw new Error('請先按「登入」用 SuperGrok 帳戶登入，或在設定頁填入 xAI API Key');
+  }
+
   const model = localStorage.getItem('grok_vision_model') || 'grok-2-vision-latest';
   const total = images.length;
 
@@ -43,10 +50,10 @@ export async function analyzeMultipleWithGrok(images, onProgress) {
 
   for (let i = 0; i < total; i++) {
     if (onProgress) onProgress(i + 1, total);
-    showToast(`Grok 分析中 ${i + 1}/${total}...`, 'info');
+    showToast('Grok 分析中 ' + (i + 1) + '/' + total + '...', 'info');
 
     try {
-      const parsed = await analyzeReceiptWithGrok(images[i], userKey, model);
+      const parsed = await analyzeReceiptWithGrok(images[i], model);
       const data = typeof parsed === 'string' ? JSON.parse(parsed) : parsed;
       const amt = parseFloat(data.amount);
 
@@ -60,12 +67,12 @@ export async function analyzeMultipleWithGrok(images, onProgress) {
         successIndices.push(i);
       } else {
         failIndices.push(i);
-        errorMessages.push(`第${i + 1}張: 資料不完整`);
+        errorMessages.push('第' + (i + 1) + '張: 資料不完整');
       }
     } catch (err) {
-      console.warn(`Grok image ${i + 1} failed:`, err.message);
+      console.warn('Grok image ' + (i + 1) + ' failed:', err.message);
       failIndices.push(i);
-      errorMessages.push(`第${i + 1}張: ${err.message}`);
+      errorMessages.push('第' + (i + 1) + '張: ' + err.message);
     }
 
     if (i < total - 1) await new Promise(r => setTimeout(r, 600));
@@ -92,7 +99,7 @@ export async function analyzeMultipleWithGrok(images, onProgress) {
 
   let notes = notesList.join(' | ');
   if (!notes && successIndices.length > 1) {
-    notes = `共 ${successIndices.length} 張收據（Grok 分析）`;
+    notes = '共 ' + successIndices.length + ' 張收據（Grok 分析）';
   }
 
   return {

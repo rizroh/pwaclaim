@@ -1,5 +1,7 @@
 // Vercel Serverless Function: /api/grok-vision
-// Uses xAI Grok for receipt vision analysis
+// Supports:
+// 1. User's SuperGrok OAuth access_token (preferred)
+// 2. Fallback to system XAI_API_KEY
 
 export const config = {
   api: {
@@ -24,13 +26,17 @@ export default async function handler(req, res) {
     }
     body = body || {};
 
-    const { imageBase64, userApiKey, model: requestedModel } = body;
+    const { imageBase64, userAccessToken, userApiKey, model: requestedModel } = body;
 
-    const apiKey = (userApiKey && String(userApiKey).trim()) || process.env.XAI_API_KEY;
+    // Priority: 1) user's OAuth token  2) user's API key  3) system env key
+    const bearerToken =
+      (userAccessToken && String(userAccessToken).trim()) ||
+      (userApiKey && String(userApiKey).trim()) ||
+      process.env.XAI_API_KEY;
 
-    if (!apiKey) {
-      return res.status(500).json({
-        error: 'xAI API Key 未設定。請到 Vercel Environment Variables 加入 XAI_API_KEY，或在設定頁填入自己的 Key'
+    if (!bearerToken) {
+      return res.status(401).json({
+        error: '未登入 Grok，亦未設定 API Key。請先按「登入」用 SuperGrok 帳戶登入，或在設定頁填入 xAI API Key。'
       });
     }
 
@@ -38,13 +44,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '缺少 imageBase64' });
     }
 
-    // Keep data URL format for xAI (they accept data:image/...;base64,...)
     let imageUrl = imageBase64;
     if (!imageBase64.startsWith('data:')) {
-      imageUrl = `data:image/jpeg;base64,${imageBase64}`;
+      imageUrl = 'data:image/jpeg;base64,' + imageBase64;
     }
 
-    // Preferred vision-capable models (2026)
     const allowedModels = [
       'grok-2-vision-latest',
       'grok-2-vision',
@@ -55,24 +59,8 @@ export default async function handler(req, res) {
     ];
     const model = allowedModels.includes(requestedModel) ? requestedModel : 'grok-2-vision-latest';
 
-    const prompt = `你是一位香港會計專家。請仔細分析這張收據圖片，並只回傳以下 JSON 格式（不要有其他文字、不要 markdown）：
+    const prompt = '你是一位香港會計專家。請仔細分析這張收據圖片，並只回傳以下 JSON 格式（不要有其他文字、不要 markdown）：\n\n{\n  "date": "YYYY-MM-DD",\n  "amount": 數字,\n  "vendor": "商戶名稱",\n  "category": "Meals 或 Transport 或 Office 或 Professional Services 或 Marketing 或 Travel 或 Utilities 或 Other",\n  "notes": "簡短備註（可選）",\n  "confidence": 0到100的數字\n}\n\n注意：\n- 日期優先用收據上的日期\n- 金額以 HKD 為準，取最終應付金額\n- 商戶名稱盡量完整\n- 如果資訊不清楚，請作出合理推測';
 
-{
-  "date": "YYYY-MM-DD",
-  "amount": 數字,
-  "vendor": "商戶名稱",
-  "category": "Meals 或 Transport 或 Office 或 Professional Services 或 Marketing 或 Travel 或 Utilities 或 Other",
-  "notes": "簡短備註（可選）",
-  "confidence": 0到100的數字
-}
-
-注意：
-- 日期優先用收據上的日期
-- 金額以 HKD 為準，取最終應付金額
-- 商戶名稱盡量完整
-- 如果資訊不清楚，請作出合理推測`;
-
-    // xAI Chat Completions style (OpenAI-compatible)
     const payload = {
       model,
       messages: [
@@ -101,7 +89,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': 'Bearer ' + bearerToken
       },
       body: JSON.stringify(payload)
     });
@@ -110,6 +98,14 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       console.error('Grok Vision API Error:', JSON.stringify(data).slice(0, 600));
+      if (response.status === 401 || response.status === 403) {
+        return res.status(response.status).json({
+          error: 'Grok token 無效或已過期，請重新登入 SuperGrok',
+          modelUsed: model,
+          status: response.status,
+          details: data.error?.message || data.message
+        });
+      }
       return res.status(response.status).json({
         error: data.error?.message || data.message || 'Grok Vision API 回傳錯誤',
         modelUsed: model,
@@ -130,7 +126,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       data: parsed,
-      modelUsed: model
+      modelUsed: model,
+      authMethod: userAccessToken ? 'oauth' : (userApiKey ? 'user-key' : 'system-key')
     });
 
   } catch (error) {
