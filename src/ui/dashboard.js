@@ -69,7 +69,7 @@ export function renderDashboard(container) {
     showToast('正在為您準備 Gemini 智能月結報告...', 'info');
     try {
       const userKey = localStorage.getItem('user_gemini_api_key') || '';
-      const model = localStorage.getItem('gemini_model') || 'gemini-3.5-flash-lite';
+      const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
       const report = await generateSummary(state.expenses, userKey, model);
       alert(report); // simple display for now; can upgrade to modal later
     } catch (err) {

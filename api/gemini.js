@@ -1,5 +1,13 @@
 // Vercel Serverless Function: /api/gemini
-// 根據你 API Key 實際可用的 model 更新（2026-07）
+// Hardened version – always returns JSON, better error messages
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '8mb'   // allow larger base64 images
+    }
+  }
+};
 
 export default async function handler(req, res) {
   // CORS
@@ -16,26 +24,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { action, imageBase64, expenses, userApiKey, model: requestedModel } = req.body || {};
+    // Safety: body might be string in some edge cases
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { body = {}; }
+    }
+    body = body || {};
 
-    // 優先用用戶自己提供的 Key，其次用 Vercel Environment Variable
-    const apiKey = (userApiKey && userApiKey.trim()) || process.env.GEMINI_API_KEY;
+    const { action, imageBase64, expenses, userApiKey, model: requestedModel } = body;
 
-    // 根據你 rate-limit 實際有額度的 model（2026-07-27）
+    const apiKey = (userApiKey && String(userApiKey).trim()) || process.env.GEMINI_API_KEY;
+
+    // Models that appeared in your rate-limit dashboard (2026-07)
     const allowedModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
       'gemini-3.6-flash',
       'gemini-2.5-flash',
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
       'gemini-2.5-flash-lite',
-      'gemini-flash-latest'
+      'gemini-2.0-flash',
+      'gemini-flash-latest',
+      'gemini-1.5-flash'
     ];
-    
-    let model = allowedModels.includes(requestedModel) ? requestedModel : 'gemini-3.5-flash-lite';
+
+    let model = allowedModels.includes(requestedModel) ? requestedModel : 'gemini-2.5-flash';
 
     if (!apiKey) {
       return res.status(500).json({
-        error: 'Gemini API Key 未設定。請在設定頁填入 Key，或到 Vercel Dashboard → Environment Variables 加入 GEMINI_API_KEY'
+        error: 'Gemini API Key 未設定。請到 Vercel → Settings → Environment Variables 加入 GEMINI_API_KEY，或在 App 設定頁填入自己的 Key'
       });
     }
 
@@ -45,11 +61,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: '缺少 imageBase64' });
       }
 
-      // 關鍵：Gemini 只接受純 base64，必須去掉 data:image/...;base64, 前綴
+      // Strip data URL prefix – Gemini only accepts pure base64
       let pureBase64 = imageBase64;
       let mimeType = 'image/jpeg';
 
-      if (imageBase64.startsWith('data:')) {
+      if (typeof imageBase64 === 'string' && imageBase64.startsWith('data:')) {
         const matches = imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
         if (matches) {
           mimeType = matches[1];
@@ -57,6 +73,11 @@ export default async function handler(req, res) {
         } else {
           pureBase64 = imageBase64.split(',')[1] || imageBase64;
         }
+      }
+
+      // Rough size check (base64 is ~1.33x original)
+      if (pureBase64.length > 6_000_000) {
+        return res.status(400).json({ error: '圖片太大，請壓縮後再試（建議單張 < 4MB）' });
       }
 
       const prompt = `你是一位香港會計專家。請仔細分析這張收據圖片，並只回傳以下 JSON 格式（不要有其他文字）：
@@ -93,7 +114,7 @@ export default async function handler(req, res) {
         generationConfig: {
           temperature: 0.1,
           maxOutputTokens: 600,
-          responseMimeType: "application/json"
+          responseMimeType: 'application/json'
         }
       };
 
@@ -105,26 +126,26 @@ export default async function handler(req, res) {
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        console.error('Gemini API Error:', data);
+        console.error('Gemini API Error:', JSON.stringify(data).slice(0, 500));
         return res.status(response.status).json({
-          error: data.error?.message || 'Gemini API 回傳錯誤',
-          details: data,
-          modelUsed: model
+          error: data.error?.message || data.message || 'Gemini API 回傳錯誤',
+          modelUsed: model,
+          status: response.status
         });
       }
 
-      // 提取回傳內容
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      
+
       let parsed;
       try {
         const cleaned = text.replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
         parsed = JSON.parse(cleaned);
       } catch (e) {
-        parsed = { raw: text, error: 'JSON parse failed' };
+        // If JSON parse fails, still return the raw text so frontend can see something
+        parsed = { raw: text, error: 'JSON parse failed', amount: 0, vendor: '', date: '' };
       }
 
       return res.status(200).json({
@@ -152,11 +173,7 @@ export default async function handler(req, res) {
 ${JSON.stringify(expenses, null, 2)}`;
 
       const payload = {
-        contents: [
-          {
-            parts: [{ text: summaryPrompt }]
-          }
-        ],
+        contents: [{ parts: [{ text: summaryPrompt }] }],
         generationConfig: {
           temperature: 0.3,
           maxOutputTokens: 800
@@ -171,7 +188,7 @@ ${JSON.stringify(expenses, null, 2)}`;
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         return res.status(response.status).json({
@@ -189,11 +206,13 @@ ${JSON.stringify(expenses, null, 2)}`;
       });
     }
 
-    return res.status(400).json({ error: '未知的 action' });
+    return res.status(400).json({ error: '未知的 action，請傳 analyze-receipt 或 generate-summary' });
 
   } catch (error) {
-    console.error('Gemini Function Error:', error);
+    console.error('Gemini Function Unhandled Error:', error);
+    // Always return JSON so frontend can read the message
     return res.status(500).json({
-      error: '伺服器內部錯誤: ' + error.message
+      error: '伺服器內部錯誤: ' + (error.message || String(error))
     });
   }
+}

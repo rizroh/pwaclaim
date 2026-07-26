@@ -6,7 +6,7 @@ import { showToast } from './toast.js';
 
 export function renderSettings(container) {
   const userKey = localStorage.getItem('user_gemini_api_key') || '';
-  const model = localStorage.getItem('gemini_model') || 'gemini-3.5-flash-lite';
+  const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
 
   container.innerHTML = `
     <h2 class="font-semibold text-lg mb-5">設定</h2>
@@ -21,11 +21,13 @@ export function renderSettings(container) {
         
         <label class="block text-xs font-medium text-slate-500 mb-1.5">模型</label>
         <select id="gemini-model" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none">
-          <option value="gemini-3.5-flash-lite" ${model === 'gemini-3.5-flash-lite' ? 'selected' : ''}>gemini-3.5-flash-lite（推薦・額度最高）</option>
+          <option value="gemini-2.5-flash" ${model === 'gemini-2.5-flash' ? 'selected' : ''}>gemini-2.5-flash（推薦）</option>
+          <option value="gemini-2.5-flash-lite" ${model === 'gemini-2.5-flash-lite' ? 'selected' : ''}>gemini-2.5-flash-lite</option>
+          <option value="gemini-2.0-flash" ${model === 'gemini-2.0-flash' ? 'selected' : ''}>gemini-2.0-flash</option>
+          <option value="gemini-1.5-flash" ${model === 'gemini-1.5-flash' ? 'selected' : ''}>gemini-1.5-flash</option>
+          <option value="gemini-3.5-flash-lite" ${model === 'gemini-3.5-flash-lite' ? 'selected' : ''}>gemini-3.5-flash-lite</option>
           <option value="gemini-3.5-flash" ${model === 'gemini-3.5-flash' ? 'selected' : ''}>gemini-3.5-flash</option>
           <option value="gemini-3.6-flash" ${model === 'gemini-3.6-flash' ? 'selected' : ''}>gemini-3.6-flash</option>
-          <option value="gemini-2.5-flash" ${model === 'gemini-2.5-flash' ? 'selected' : ''}>gemini-2.5-flash</option>
-          <option value="gemini-2.5-flash-lite" ${model === 'gemini-2.5-flash-lite' ? 'selected' : ''}>gemini-2.5-flash-lite</option>
         </select>
         
         <button id="btn-save-key" class="mt-3 w-full bg-primary-800 text-white py-2.5 rounded-xl text-sm font-medium active:scale-[0.98] transition">
@@ -38,7 +40,7 @@ export function renderSettings(container) {
         <p>• 所有開支數據同相片都只存在你部手機</p>
         <p>• Gemini 只會暫時收到收據圖片做分析</p>
         <p>• Grok 登入用嚟身份驗證（可選）</p>
-        <p>• 而家預設用 <b>gemini-3.5-flash-lite</b>（你帳戶額度最高）</p>
+        <p>• 而家預設用 <b>gemini-2.5-flash</b>。如果失敗可試其他模型</p>
       </div>
 
       <button id="btn-clear" class="w-full border border-red-200 text-red-600 py-3 rounded-2xl text-sm font-medium hover:bg-red-50 active:scale-[0.98] transition">

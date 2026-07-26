@@ -5,7 +5,7 @@
 
 import { showToast } from '../ui/toast.js';
 
-export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemini-3.5-flash-lite') {
+export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemini-2.5-flash') {
   const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -26,7 +26,7 @@ export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemi
   return data.data;
 }
 
-export async function generateSummary(expenses, userApiKey = '', model = 'gemini-3.5-flash-lite') {
+export async function generateSummary(expenses, userApiKey = '', model = 'gemini-2.5-flash') {
   const res = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,7 +52,7 @@ export async function generateSummary(expenses, userApiKey = '', model = 'gemini
  */
 export async function analyzeMultipleReceipts(images, onProgress) {
   const userKey = localStorage.getItem('user_gemini_api_key') || '';
-  const model = localStorage.getItem('gemini_model') || 'gemini-3.5-flash-lite';
+  const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
   const total = images.length;
 
   let totalAmount = 0;
