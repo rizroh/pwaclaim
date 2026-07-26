@@ -17,8 +17,12 @@ export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemi
     })
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Gemini 分析失敗');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
+    const modelInfo = data.modelUsed ? ` [${data.modelUsed}]` : '';
+    throw new Error(msg + modelInfo);
+  }
   return data.data;
 }
 
@@ -34,13 +38,17 @@ export async function generateSummary(expenses, userApiKey = '', model = 'gemini
     })
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '生成報告失敗');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
   return data.data;
 }
 
 /**
  * Analyze multiple images, sum amounts, merge vendors/categories
+ * Now surfaces the real error messages instead of a generic failure.
  */
 export async function analyzeMultipleReceipts(images, onProgress) {
   const userKey = localStorage.getItem('user_gemini_api_key') || '';
@@ -54,6 +62,7 @@ export async function analyzeMultipleReceipts(images, onProgress) {
   let latestDate = '';
   const successIndices = [];
   const failIndices = [];
+  const errorMessages = [];
 
   for (let i = 0; i < total; i++) {
     if (onProgress) onProgress(i + 1, total);
@@ -62,28 +71,40 @@ export async function analyzeMultipleReceipts(images, onProgress) {
     try {
       const parsed = await analyzeReceipt(images[i], userKey, model);
       const data = typeof parsed === 'string' ? JSON.parse(parsed) : parsed;
-      const amt = parseFloat(data.amount);
 
+      // Accept even if amount is missing / zero – still count as success if we got any data
+      const amt = parseFloat(data.amount);
       if (!isNaN(amt) && amt > 0) {
         totalAmount += amt;
-        if (data.vendor) vendors.push(data.vendor);
-        if (data.category) categories.push(data.category);
-        if (data.notes) notesList.push(data.notes);
-        if (data.date && (!latestDate || data.date > latestDate)) latestDate = data.date;
+      }
+
+      if (data.vendor) vendors.push(data.vendor);
+      if (data.category) categories.push(data.category);
+      if (data.notes) notesList.push(data.notes);
+      if (data.date && (!latestDate || data.date > latestDate)) latestDate = data.date;
+
+      // Consider success if we got at least vendor or amount or date
+      if ((data.vendor && data.vendor !== '未知商戶') || (!isNaN(amt) && amt > 0) || data.date) {
         successIndices.push(i);
       } else {
         failIndices.push(i);
+        errorMessages.push(`第${i + 1}張: AI 回傳資料不完整`);
       }
     } catch (err) {
       console.warn(`Image ${i + 1} failed:`, err.message);
       failIndices.push(i);
+      errorMessages.push(`第${i + 1}張: ${err.message}`);
     }
 
     if (i < total - 1) await new Promise(r => setTimeout(r, 800));
   }
 
   if (successIndices.length === 0) {
-    throw new Error('全部相片分析失敗');
+    // Show the real underlying errors instead of a generic message
+    const detail = errorMessages.length > 0
+      ? errorMessages.slice(0, 3).join(' | ')
+      : '未知錯誤';
+    throw new Error(detail);
   }
 
   let topCategory = 'Other';
