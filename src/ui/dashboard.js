@@ -1,17 +1,17 @@
 /**
  * Dashboard View
- * Priority 2: cleaner cards, better empty state, improved list
+ * Cleaner cards, empty state, AI report modal
  */
 
 import { state } from '../state.js';
-import { switchView } from '../app.js';
+import { switchView, showReportModal } from '../app.js';
 import { showToast } from './toast.js';
 import { saveExpenses } from '../services/storage.js';
 import { generateSummary } from '../services/gemini.js';
 
 export function renderDashboard(container) {
   const expenses = state.expenses || [];
-  
+
   const total = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const thisMonth = expenses
     .filter(e => {
@@ -26,11 +26,11 @@ export function renderDashboard(container) {
     <div class="grid grid-cols-2 gap-3 mb-5">
       <div class="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm">
         <p class="text-[11px] font-medium text-slate-500 tracking-wide">總開支</p>
-        <p class="text-xl font-semibold tabular-nums mt-1">HK$${total.toLocaleString('en-HK', {minimumFractionDigits: 2})}</p>
+        <p class="text-xl font-semibold tabular-nums mt-1">HK$${total.toLocaleString('en-HK', { minimumFractionDigits: 2 })}</p>
       </div>
       <div class="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm">
         <p class="text-[11px] font-medium text-slate-500 tracking-wide">本月</p>
-        <p class="text-xl font-semibold tabular-nums text-emerald-600 mt-1">HK$${thisMonth.toLocaleString('en-HK', {minimumFractionDigits: 2})}</p>
+        <p class="text-xl font-semibold tabular-nums text-emerald-600 mt-1">HK$${thisMonth.toLocaleString('en-HK', { minimumFractionDigits: 2 })}</p>
       </div>
     </div>
 
@@ -59,31 +59,54 @@ export function renderDashboard(container) {
     </div>
   `;
 
-  // Events
   document.getElementById('btn-add')?.addEventListener('click', () => switchView('add'));
+
   document.getElementById('btn-summary')?.addEventListener('click', async () => {
     if (!state.expenses.length) {
       showToast('未有開支可以生成報告', 'warning');
       return;
     }
-    showToast('正在為您準備 Gemini 智能月結報告...', 'info');
+    showToast('正在準備 AI 月結報告...', 'info');
     try {
       const userKey = localStorage.getItem('user_gemini_api_key') || '';
-      const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+      const model = localStorage.getItem('gemini_model') || 'gemini-3.5-flash-lite';
       const report = await generateSummary(state.expenses, userKey, model);
-      alert(report); // simple display for now; can upgrade to modal later
+      // Use modal instead of alert — fixes Chinese garbled text
+      showReportModal(typeof report === 'string' ? report : JSON.stringify(report, null, 2));
     } catch (err) {
       showToast('生成報告失敗：' + err.message, 'error');
     }
   });
 
-  // Delete handlers
+  // Search filter
+  const searchInput = document.getElementById('search');
+  searchInput?.addEventListener('input', () => {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    const list = document.getElementById('expense-list');
+    if (!list) return;
+    const filtered = !q
+      ? expenses
+      : expenses.filter(e =>
+          (e.vendor || '').toLowerCase().includes(q) ||
+          (e.category || '').toLowerCase().includes(q) ||
+          (e.notes || '').toLowerCase().includes(q)
+        );
+    list.innerHTML = filtered.length === 0
+      ? `<p class="text-center text-sm text-slate-400 py-8">搵唔到相關開支</p>`
+      : filtered.map(e => renderCard(e)).join('');
+    bindDelete(container);
+  });
+
+  bindDelete(container);
+}
+
+function bindDelete(container) {
   container.querySelectorAll('[data-delete]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = btn.dataset.delete;
       if (!confirm('確定刪除呢筆開支？')) return;
-      
+
       state.expenses = state.expenses.filter(x => x.id !== id);
       await saveExpenses(state.expenses);
       showToast('已刪除', 'success');
@@ -98,45 +121,42 @@ function renderEmpty() {
       <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">🧾</div>
       <p class="font-medium text-slate-600">仲未有開支記錄</p>
       <p class="text-xs text-slate-400 mt-1 mb-5">拍張收據相片開始記錄</p>
-      <button onclick="document.querySelector('[data-view=add]')?.click()" 
-        class="inline-flex items-center gap-2 text-sm bg-white border border-slate-200 hover:bg-slate-50 px-5 py-2.5 rounded-2xl font-medium active:scale-95 transition">
-        立即新增第一張
+      <button onclick="document.querySelector('[data-view=add]')?.click()" class="inline-flex items-center gap-1.5 bg-primary-800 text-white px-5 py-2.5 rounded-xl text-sm font-medium">
+        ＋ 新增第一筆
       </button>
     </div>
   `;
 }
 
-function renderCard(exp) {
-  const catColors = {
-    'Meals': 'bg-orange-100 text-orange-700',
-    'Transport': 'bg-blue-100 text-blue-700',
-    'Office': 'bg-slate-100 text-slate-700',
-    'Professional Services': 'bg-purple-100 text-purple-700',
-    'Marketing': 'bg-pink-100 text-pink-700',
-    'Travel': 'bg-cyan-100 text-cyan-700',
-    'Utilities': 'bg-amber-100 text-amber-700',
-    'Other': 'bg-gray-100 text-gray-700'
-  };
-  const color = catColors[exp.category] || catColors.Other;
-
+function renderCard(e) {
+  const amount = Number(e.amount) || 0;
+  const dateStr = e.date || '';
+  const cat = e.category || 'Other';
   return `
-    <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm active:scale-[0.99] transition flex gap-3">
+    <div class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex items-start gap-3">
       <div class="flex-1 min-w-0">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0">
-            <p class="font-medium text-[15px] truncate">${exp.vendor || '未命名商戶'}</p>
-            <p class="text-xs text-slate-500 mt-0.5">${exp.date}</p>
-          </div>
-          <p class="font-semibold tabular-nums text-[15px] whitespace-nowrap">HK$${Number(exp.amount).toFixed(2)}</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-medium text-sm truncate">${escapeHtml(e.vendor || '未知商戶')}</p>
+          <p class="font-semibold text-sm tabular-nums whitespace-nowrap">HK$${amount.toFixed(2)}</p>
         </div>
-        <div class="flex items-center gap-2 mt-2.5">
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full ${color}">${exp.category || 'Other'}</span>
-          ${exp.images?.length ? `<span class="text-[10px] text-slate-400">${exp.images.length} 張相</span>` : ''}
+        <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+          <span>${dateStr}</span>
+          <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+          <span>${escapeHtml(cat)}</span>
         </div>
+        ${e.notes ? `<p class="text-[11px] text-slate-400 mt-1 truncate">${escapeHtml(e.notes)}</p>` : ''}
       </div>
-      <button data-delete="${exp.id}" class="self-center p-2 text-slate-300 hover:text-red-500 transition">
-        🗑️
+      <button data-delete="${e.id}" class="shrink-0 w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center text-sm hover:bg-red-100 active:scale-95 transition" title="刪除">
+        🗑
       </button>
     </div>
   `;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

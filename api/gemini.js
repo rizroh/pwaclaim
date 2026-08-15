@@ -36,18 +36,10 @@ export default async function handler(req, res) {
     const apiKey = (userApiKey && String(userApiKey).trim()) || process.env.GEMINI_API_KEY;
 
     // Models that appeared in your rate-limit dashboard (2026-07)
-    const allowedModels = [
-      'gemini-3.5-flash-lite',
-      'gemini-3.5-flash',
-      'gemini-3.6-flash',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-      'gemini-2.0-flash',
-      'gemini-flash-latest',
-      'gemini-1.5-flash'
-    ];
-
-    let model = allowedModels.includes(requestedModel) ? requestedModel : 'gemini-2.5-flash';
+    const requested = (requestedModel && String(requestedModel).trim()) || '';
+    let model = (requested.startsWith('gemini-') || requested.startsWith('models/gemini-'))
+      ? requested.replace(/^models\//, '')
+      : 'gemini-3.5-flash-lite';
 
     if (!apiKey) {
       return res.status(500).json({

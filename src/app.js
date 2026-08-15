@@ -1,6 +1,7 @@
 /**
  * Main Application Controller
  * Handles view switching, global events, and orchestration
+ * (Grok OAuth login removed)
  */
 
 import { state, subscribe } from './state.js';
@@ -13,28 +14,21 @@ import { loadExpenses } from './services/storage.js';
 let currentView = 'dashboard';
 
 export async function initApp() {
-  // Load data
   const expenses = await loadExpenses();
   state.expenses = expenses;
-  
-  // Initial render
+
   renderApp();
-  
-  // Subscribe to state changes
+
   subscribe(() => {
     renderApp();
   });
-  
-  // Handle deep links / OAuth callback
-  handleAuthCallback();
-  
-  // PWA install prompt
+
   setupInstallPrompt();
 }
 
 function renderApp() {
   const app = document.getElementById('app');
-  
+
   app.innerHTML = `
     <!-- Header -->
     <header class="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50">
@@ -48,9 +42,6 @@ function renderApp() {
         </div>
         
         <div class="flex items-center gap-2">
-          <div id="auth-badge" class="hidden sm:flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full">
-            <span id="auth-name">Guest</span>
-          </div>
           <button id="install-btn" class="hidden items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-full hover:bg-slate-50 active:scale-95 transition">
             📲 安裝
           </button>
@@ -58,22 +49,12 @@ function renderApp() {
       </div>
     </header>
 
-    <!-- Auth Status (compact) -->
-    <div id="auth-bar" class="max-w-lg mx-auto px-4">
-      <div class="flex items-center justify-between py-2 px-3 bg-slate-100/80 rounded-b-2xl text-xs border-x border-b border-slate-200/60">
-        <span id="auth-status" class="text-slate-600">🔒 未連接 Grok</span>
-        <button id="auth-btn" class="bg-black text-white px-3 py-1 rounded-full font-medium hover:bg-slate-800 active:scale-95 transition">
-          登入
-        </button>
-      </div>
-    </div>
-
     <!-- Main Content Area -->
-    <main id="main-content" class="max-w-lg mx-auto px-4 pt-4 pb-28 min-h-[calc(100vh-140px)]">
+    <main id="main-content" class="max-w-lg mx-auto px-4 pt-4 pb-28 min-h-[calc(100vh-100px)]">
       <!-- Views injected here -->
     </main>
 
-    <!-- Bottom Navigation (improved) -->
+    <!-- Bottom Navigation -->
     <nav class="fixed bottom-0 left-0 right-0 z-50 safe-bottom">
       <div class="max-w-lg mx-auto bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
         <div class="grid grid-cols-4 h-16">
@@ -82,7 +63,6 @@ function renderApp() {
             <span class="text-[10px] font-medium">主頁</span>
           </button>
           
-          <!-- FAB style Add button -->
           <button data-view="add" class="nav-btn relative flex flex-col items-center justify-center -mt-5">
             <div class="w-14 h-14 bg-primary-800 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-primary-800/30 active:scale-95 transition-transform">
               ＋
@@ -104,14 +84,26 @@ function renderApp() {
 
     <!-- Toast container -->
     <div id="toast-root" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none"></div>
+
+    <!-- Report Modal (for AI 月結報告) -->
+    <div id="report-modal" class="fixed inset-0 z-[200] hidden items-end sm:items-center justify-center bg-black/40 p-4">
+      <div class="bg-white w-full max-w-lg max-h-[80vh] rounded-3xl shadow-xl flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 class="font-semibold text-base">✨ AI 月結報告</h3>
+          <button id="report-close" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200">✕</button>
+        </div>
+        <div id="report-body" class="flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words"></div>
+        <div class="px-5 py-3 border-t border-slate-100">
+          <button id="report-copy" class="w-full py-2.5 rounded-xl bg-primary-800 text-white text-sm font-medium active:scale-[0.98] transition">複製報告</button>
+        </div>
+      </div>
+    </div>
   `;
 
-  // Bind navigation
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view;
       if (view === 'pdf') {
-        // Trigger PDF generation
         import('./services/pdf.js').then(m => m.generatePDF());
         return;
       }
@@ -119,12 +111,12 @@ function renderApp() {
     });
   });
 
-  // Bind auth button
-  document.getElementById('auth-btn')?.addEventListener('click', () => {
-    window.location.href = '/api/auth/login';
+  // Modal close
+  document.getElementById('report-close')?.addEventListener('click', closeReportModal);
+  document.getElementById('report-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'report-modal') closeReportModal();
   });
 
-  // Render current view
   switchView(currentView);
 }
 
@@ -133,14 +125,12 @@ export function switchView(view) {
   const main = document.getElementById('main-content');
   if (!main) return;
 
-  // Update nav active state
   document.querySelectorAll('.nav-btn').forEach(btn => {
     const isActive = btn.dataset.view === view;
     btn.classList.toggle('text-primary-800', isActive);
     btn.classList.toggle('text-slate-500', !isActive);
   });
 
-  // Render view
   switch (view) {
     case 'dashboard':
       renderDashboard(main);
@@ -156,43 +146,37 @@ export function switchView(view) {
   }
 }
 
-function handleAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('access_token');
-  const name = params.get('user_name');
-  
-  if (token) {
-    localStorage.setItem('grok_token', token);
-    if (name) localStorage.setItem('grok_name', name);
-    
-    // Clean URL
-    window.history.replaceState({}, '', window.location.pathname);
-    showToast(`已登入：${name || 'Grok 用戶'}`, 'success');
+/** Show AI report in a proper modal (avoids alert() Chinese garbled text) */
+export function showReportModal(text) {
+  const modal = document.getElementById('report-modal');
+  const body = document.getElementById('report-body');
+  if (!modal || !body) {
+    // fallback
+    alert(text);
+    return;
   }
+  body.textContent = text || '（無內容）';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
 
-  // Always restore UI from localStorage (works on normal page load too)
-  const savedToken = localStorage.getItem('grok_token');
-  const savedName = localStorage.getItem('grok_name') || 'Grok';
-  
-  if (savedToken) {
-    const badge = document.getElementById('auth-badge');
-    const status = document.getElementById('auth-status');
-    const btn = document.getElementById('auth-btn');
-    
-    if (badge) {
-      badge.classList.remove('hidden');
-      const nameEl = document.getElementById('auth-name');
-      if (nameEl) nameEl.textContent = savedName;
-    }
-    if (status) status.textContent = `✅ ${savedName}`;
-    if (btn) {
-      btn.textContent = '登出';
-      btn.onclick = () => {
-        localStorage.removeItem('grok_token');
-        localStorage.removeItem('grok_name');
-        location.reload();
-      };
-    }
+  const copyBtn = document.getElementById('report-copy');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(text || '');
+        showToast('已複製報告', 'success');
+      } catch {
+        showToast('複製失敗，請手動選取文字', 'warning');
+      }
+    };
+  }
+}
+
+function closeReportModal() {
+  const modal = document.getElementById('report-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
   }
 }
 
@@ -206,13 +190,21 @@ function setupInstallPrompt() {
       btn.classList.remove('hidden');
       btn.classList.add('flex');
       btn.onclick = async () => {
+        if (!deferredPrompt) return;
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
         if (outcome === 'accepted') {
           btn.classList.add('hidden');
+          showToast('已加入主畫面', 'success');
         }
         deferredPrompt = null;
       };
     }
+  });
+
+  // Already installed
+  window.addEventListener('appinstalled', () => {
+    const btn = document.getElementById('install-btn');
+    if (btn) btn.classList.add('hidden');
   });
 }

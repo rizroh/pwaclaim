@@ -1,78 +1,47 @@
-# 開支索償 PWA — Redesign (v2 Working Skeleton)
+# 開支索償 PWA — Redesign (pwaclaim)
 
-這是根據原有 `expenseepwa` 做的 **Priority 1 + Priority 2** 重構，已移植主要功能。
+Mobile-first 開支索償 PWA：相機／上傳收據 → OCR / Gemini / Grok Vision 分析 → 儲存 → PDF 匯出。
 
-## 已完成功能
+## 已完成
 
-### 架構 (Priority 1)
-- 從單一巨型 `index.html` 拆成清晰模組
-- Vite 開發環境 + vite-plugin-pwa
-- 簡單 reactive state
-- 保留原有 Vercel Serverless Functions
+- 模組化架構（Vite + vite-plugin-pwa）
+- 相機、多圖上傳 + 壓縮
+- 本地 Tesseract OCR（中英）
+- Gemini AI 多圖分析 + 月結報告（modal 顯示，避免中文亂碼）
+- Grok Vision（用 xAI API Key，已移除 OAuth 登入）
+- PDF 生成（中文支援）
+- 設定頁：Gemini / xAI API Key + 模型選擇
+- PWA 安裝按鈕 + placeholder icons
 
-### 視覺與互動 (Priority 2)
-- 更現代底部導航（中間 FAB）
-- 乾淨卡片 + empty state
-- 改善 toast
-- 統一設計系統
-
-### 已移植核心功能
-- ✅ 相機拍照（後置鏡頭優先）
-- ✅ 多圖上傳 + 壓縮
-- ✅ 本地 Tesseract OCR（中英）
-- ✅ Gemini AI 多圖分析（自動加總、填表）
-- ✅ PDF 生成（支援中文、收據相片頁）
-- ✅ Gemini 月結報告
-- ✅ Grok OAuth 登入流程
-- ✅ 設定頁（自備 Gemini Key）
-
-## 目錄結構
+## 環境變數（Vercel）
 
 ```
-expenseepwa-redesign/
-├── index.html
-├── package.json
-├── vite.config.js
-├── README.md
-├── api/                    # Serverless (Gemini + Grok OAuth)
-│   ├── gemini.js
-│   ├── auth-login.js
-│   └── auth-callback.js
-└── src/
-    ├── main.js
-    ├── app.js
-    ├── state.js
-    ├── utils.js
-    ├── ui/
-    │   ├── dashboard.js
-    │   ├── add-expense.js
-    │   ├── settings.js
-    │   └── toast.js
-    └── services/
-        ├── storage.js
-        ├── ocr.js
-        ├── gemini.js
-        └── pdf.js
+GEMINI_API_KEY=...
+XAI_API_KEY=xai-...
 ```
 
-## 如何運行
+（已不再需要 GROK_CLIENT_ID / GROK_CLIENT_SECRET）
+
+## 本機開發
 
 ```bash
-cd expenseepwa-redesign
 npm install
 npm run dev
 ```
 
-然後打開 http://localhost:5173
+## 部署
 
-> 注意：Gemini 同 Grok OAuth 需要部署到 Vercel 並設定環境變數（GEMINI_API_KEY、GROK_CLIENT_ID、GROK_CLIENT_SECRET）先可以完整使用。本地開發時 OCR 同 UI 可以正常運作。
+Push 到 GitHub → Vercel 自動 build（Framework: Vite，Output: dist）
 
-## 下一步可做
+## Offline / 安裝注意
 
-1. 生成真正高質素 PWA icons
-2. 把 Tailwind 轉成正式 build
-3. 改善月結報告顯示方式（用 modal 代替 alert）
-4. 加入資料匯出 / 匯入
-5. 更完善的 offline 體驗
+1. Icons：public/icons/icon-192.png、icon-512.png 而家係純色 placeholder，正式上線請換成真正 logo。
+2. HTTPS：PWA 安裝同 Service Worker 需要 HTTPS（Vercel 預設有）。
+3. 安裝：Chrome「加到主畫面」／Safari「分享 → 加入主畫面」。Header 有「📲 安裝」按鈕。
+4. Offline：vite-plugin-pwa 會 cache 靜態資源；API 呼叫（Gemini/Grok）離線時會失敗屬正常。本地已儲存嘅開支可離線睇。
 
-原專案：https://github.com/rizroh/expenseepwa
+## 模型列表（已清理）
+
+Gemini：gemini-2.5-flash（預設）、gemini-2.5-flash-lite、gemini-2.0-flash、gemini-1.5-flash、gemini-1.5-flash-8b
+
+Grok Vision：grok-2-vision-latest（預設）、grok-2-vision、grok-4.5

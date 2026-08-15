@@ -1,12 +1,11 @@
 /**
  * Grok (xAI) Vision Service
- * Prefers SuperGrok OAuth access_token, then user API key, then system key
+ * Uses user xAI API Key or system XAI_API_KEY (OAuth login removed)
  */
 
 import { showToast } from '../ui/toast.js';
 
 export async function analyzeReceiptWithGrok(imageBase64, model = 'grok-2-vision-latest') {
-  const userAccessToken = localStorage.getItem('grok_token') || '';
   const userApiKey = localStorage.getItem('user_xai_api_key') || '';
 
   const res = await fetch('/api/grok-vision', {
@@ -14,7 +13,6 @@ export async function analyzeReceiptWithGrok(imageBase64, model = 'grok-2-vision
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       imageBase64,
-      userAccessToken,
       userApiKey,
       model
     })
@@ -30,10 +28,11 @@ export async function analyzeReceiptWithGrok(imageBase64, model = 'grok-2-vision
 }
 
 export async function analyzeMultipleWithGrok(images, onProgress) {
-  const hasToken = !!localStorage.getItem('grok_token');
   const hasKey = !!localStorage.getItem('user_xai_api_key');
-  if (!hasToken && !hasKey) {
-    throw new Error('請先按「登入」用 SuperGrok 帳戶登入，或在設定頁填入 xAI API Key');
+  // System key is on server; we still allow call — server will error if neither exists
+  if (!hasKey) {
+    // Soft warning only; server may still have XAI_API_KEY
+    console.info('No user xAI key in localStorage; relying on server XAI_API_KEY if set');
   }
 
   const model = localStorage.getItem('grok_vision_model') || 'grok-2-vision-latest';

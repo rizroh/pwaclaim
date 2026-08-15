@@ -7,6 +7,7 @@
     { "source": "/api/auth/callback", "destination": "/api/auth-callback" },
     { "source": "/api/gemini", "destination": "/api/gemini" },
     { "source": "/api/grok-vision", "destination": "/api/grok-vision" },
+    { "source": "/api/models", "destination": "/api/models" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
