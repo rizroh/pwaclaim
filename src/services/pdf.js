@@ -1,10 +1,30 @@
 /**
- * PDF Generation – real Chinese font (Noto Sans TC), not canvas drawing
+ * PDF Generation – Noto Sans TC font for ALL pages (summary + receipt)
  */
 
 import { state } from '../state.js';
 import { showToast } from '../ui/toast.js';
-import { ensureChineseFont, setPdfFont, FONT_NAME } from './pdf-font.js';
+import { ensureChineseFont, FONT_NAME } from './pdf-font.js';
+
+/** Always re-apply CJK font (jsPDF resets font on addPage) */
+function useCn(doc, size = 10) {
+  try {
+    doc.setFont(FONT_NAME, 'normal');
+  } catch (_) {
+    try {
+      doc.setFont(FONT_NAME);
+    } catch (__) {
+      doc.setFont('helvetica', 'normal');
+    }
+  }
+  doc.setFontSize(size);
+}
+
+function write(doc, text, x, y, opts, size) {
+  if (size) useCn(doc, size);
+  else useCn(doc);
+  doc.text(String(text ?? ''), x, y, opts);
+}
 
 export async function generatePDF() {
   const expenses = state.expenses || [];
@@ -44,25 +64,24 @@ export async function generatePDF() {
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 14;
 
+    // ========== PAGE 1: SUMMARY ==========
+    useCn(doc, 16);
     doc.setFillColor(30, 64, 175);
     doc.rect(0, 0, pageWidth, 22, 'F');
 
     doc.setTextColor(255, 255, 255);
-    setPdfFont(doc, 16);
-    doc.text('EXPENSE CLAIM SUMMARY', pageWidth / 2, 12, { align: 'center' });
-    setPdfFont(doc, 9);
-    doc.text(company + '  ·  ' + new Date().toLocaleDateString('en-GB'), pageWidth / 2, 18, { align: 'center' });
+    write(doc, 'EXPENSE CLAIM SUMMARY', pageWidth / 2, 12, { align: 'center' }, 16);
+    write(doc, company + '  ·  ' + new Date().toLocaleDateString('en-GB'), pageWidth / 2, 18, { align: 'center' }, 9);
 
     doc.setTextColor(30, 41, 59);
-    setPdfFont(doc, 11);
-    doc.text('Claimant: ' + claimant, margin, 32);
-    doc.text('Total Receipts: ' + expenses.length, margin, 39);
+    write(doc, 'Claimant: ' + claimant, margin, 32, undefined, 11);
+    write(doc, 'Total Receipts: ' + expenses.length, margin, 39, undefined, 11);
 
     const totalAmount = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    setPdfFont(doc, 13);
     doc.setTextColor(16, 185, 129);
-    doc.text('Total: HK$' + totalAmount.toFixed(2), pageWidth - margin, 35, { align: 'right' });
+    write(doc, 'Total: HK$' + totalAmount.toFixed(2), pageWidth - margin, 35, { align: 'right' }, 13);
 
+    useCn(doc, 8);
     if (doc.autoTable) {
       doc.autoTable({
         startY: 46,
@@ -99,48 +118,47 @@ export async function generatePDF() {
           3: { cellWidth: 22 },
           4: { cellWidth: 24, halign: 'right' },
           5: { cellWidth: 'auto' }
-        }
-      });
-    } else {
-      let y = 50;
-      expenses.forEach((e, i) => {
-        setPdfFont(doc, 9);
-        doc.setTextColor(30, 41, 59);
-        doc.text((i + 1) + '. ' + (e.date || '') + '  ' + (e.vendor || '') + '  HK$' + Number(e.amount || 0).toFixed(2), margin, y);
-        y += 7;
-        if (y > pageHeight - 20) {
-          doc.addPage();
-          y = 20;
+        },
+        didParseCell: function (data) {
+          // force font on every cell
+          data.cell.styles.font = FONT_NAME;
+          data.cell.styles.fontStyle = 'normal';
         }
       });
     }
 
+    // ========== RECEIPT DETAIL PAGES ==========
     for (let i = 0; i < expenses.length; i++) {
       const exp = expenses[i];
       doc.addPage();
-      setPdfFont(doc, 11);
+      // CRITICAL: re-apply font after every addPage
+      useCn(doc, 11);
 
       doc.setFillColor(30, 64, 175);
       doc.rect(0, 0, pageWidth, 18, 'F');
 
       doc.setTextColor(255, 255, 255);
-      setPdfFont(doc, 11);
-      doc.text('RECEIPT #' + (i + 1) + ' of ' + expenses.length, margin, 12);
-      setPdfFont(doc, 9);
-      doc.text((exp.date || '') + ' · HK$' + Number(exp.amount || 0).toFixed(2), pageWidth - margin, 12, { align: 'right' });
+      write(doc, 'RECEIPT #' + (i + 1) + ' of ' + expenses.length, margin, 12, undefined, 11);
+      write(
+        doc,
+        (exp.date || '') + ' · HK$' + Number(exp.amount || 0).toFixed(2),
+        pageWidth - margin,
+        12,
+        { align: 'right' },
+        9
+      );
 
+      // Vendor / Category / Notes — must useCn each time
       doc.setTextColor(15, 23, 42);
-      setPdfFont(doc, 14);
-      doc.text(exp.vendor || '—', margin, 28);
+      write(doc, exp.vendor || '—', margin, 28, undefined, 14);
 
-      setPdfFont(doc, 10);
       doc.setTextColor(71, 85, 105);
-      doc.text('Category: ' + (exp.category || '-'), margin, 36);
+      write(doc, 'Category: ' + (exp.category || '-'), margin, 36, undefined, 10);
       if (exp.notes) {
-        doc.text('Notes: ' + exp.notes, margin, 43);
+        write(doc, 'Notes: ' + exp.notes, margin, 43, undefined, 10);
       }
 
-      let imgY = 50;
+      let imgY = 52;
       const maxImgWidth = pageWidth - margin * 2;
       const receiptImages = exp.images || [];
 
@@ -149,7 +167,7 @@ export async function generatePDF() {
           const imgData = receiptImages[j];
           if (j > 0 && imgY > pageHeight - 60) {
             doc.addPage();
-            setPdfFont(doc, 10);
+            useCn(doc, 10); // re-apply after addPage
             imgY = 25;
           }
           try {
@@ -163,33 +181,31 @@ export async function generatePDF() {
               imgWidth = imgWidth * ratio;
             }
             if (receiptImages.length > 1) {
-              setPdfFont(doc, 9);
               doc.setTextColor(71, 85, 105);
-              doc.text('Photo ' + (j + 1) + ' of ' + receiptImages.length, margin, imgY - 3);
+              write(doc, 'Photo ' + (j + 1) + ' of ' + receiptImages.length, margin, imgY - 3, undefined, 9);
             }
             doc.addImage(imgData, 'JPEG', margin, imgY, imgWidth, imgHeight);
             imgY += imgHeight + 12;
           } catch (imgErr) {
             console.error('Image add failed', imgErr);
-            setPdfFont(doc, 9);
             doc.setTextColor(239, 68, 68);
-            doc.text('[Image #' + (j + 1) + ' failed to load]', margin, imgY);
+            write(doc, '[Image #' + (j + 1) + ' failed to load]', margin, imgY, undefined, 9);
             imgY += 10;
           }
         }
       } else {
-        setPdfFont(doc, 10);
         doc.setTextColor(148, 163, 184);
-        doc.text('(No receipt photo attached)', margin, imgY + 10);
+        write(doc, '(No receipt photo attached)', margin, imgY + 10, undefined, 10);
       }
 
-      setPdfFont(doc, 7);
       doc.setTextColor(148, 163, 184);
-      doc.text(
+      write(
+        doc,
         'Expense Claim PWA · Confidential · Page ' + doc.internal.getNumberOfPages(),
         pageWidth / 2,
         pageHeight - 8,
-        { align: 'center' }
+        { align: 'center' },
+        7
       );
     }
 

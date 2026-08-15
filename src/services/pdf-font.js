@@ -1,6 +1,6 @@
 /**
- * Load Noto Sans TC TTF into jsPDF (real font, not canvas)
- * Cached in IndexedDB after first download (~2.2MB)
+ * Load Noto Sans TC TTF into jsPDF (real font)
+ * Cached in IndexedDB after first download
  */
 
 import { get, set } from 'idb-keyval';
@@ -8,8 +8,10 @@ import { get, set } from 'idb-keyval';
 const FONT_CACHE_KEY = 'pdf_font_noto_sans_tc_b64_v1';
 const FONT_URL =
   'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-tc@5.2.5/chinese-traditional-400-normal.ttf';
-const FONT_NAME = 'NotoSansTC';
+export const FONT_NAME = 'NotoSansTC';
 const FONT_FILE = 'NotoSansTC-Regular.ttf';
+
+let cachedBase64 = null;
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -21,36 +23,27 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-let fontReady = false;
-
 export async function ensureChineseFont(doc) {
-  if (fontReady) {
-    try {
-      doc.setFont(FONT_NAME, 'normal');
-      return true;
-    } catch (_) {
-      fontReady = false;
-    }
+  if (!cachedBase64) {
+    cachedBase64 = await get(FONT_CACHE_KEY);
   }
 
-  let base64 = await get(FONT_CACHE_KEY);
-
-  if (!base64) {
+  if (!cachedBase64) {
     const res = await fetch(FONT_URL);
     if (!res.ok) throw new Error('無法下載中文字型（HTTP ' + res.status + '）');
     const buf = await res.arrayBuffer();
-    base64 = arrayBufferToBase64(buf);
+    cachedBase64 = arrayBufferToBase64(buf);
     try {
-      await set(FONT_CACHE_KEY, base64);
+      await set(FONT_CACHE_KEY, cachedBase64);
     } catch (e) {
       console.warn('Font cache failed', e);
     }
   }
 
-  doc.addFileToVFS(FONT_FILE, base64);
+  // Register on this doc instance (must do for each jsPDF document)
+  doc.addFileToVFS(FONT_FILE, cachedBase64);
   doc.addFont(FONT_FILE, FONT_NAME, 'normal');
   doc.setFont(FONT_NAME, 'normal');
-  fontReady = true;
   return true;
 }
 
@@ -62,5 +55,3 @@ export function setPdfFont(doc, size = 10) {
   }
   doc.setFontSize(size);
 }
-
-export { FONT_NAME };
