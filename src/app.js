@@ -94,15 +94,24 @@ function renderApp() {
     </div>
 
     <div id="pdf-modal" class="fixed inset-0 z-[200] hidden items-end sm:items-center justify-center bg-black/50 p-3">
-      <div class="bg-white w-full max-w-lg h-[85vh] rounded-3xl shadow-xl flex flex-col overflow-hidden">
+      <div class="bg-white w-full max-w-lg max-h-[90vh] rounded-3xl shadow-xl flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h3 class="font-semibold text-sm">📄 PDF 預覽</h3>
-          <button id="pdf-close" class="w-8 h-8 rounded-full bg-slate-100">✕</button>
+          <h3 class="font-semibold text-sm">📄 PDF 已就緒</h3>
+          <button type="button" id="pdf-close" class="w-8 h-8 rounded-full bg-slate-100">✕</button>
         </div>
-        <iframe id="pdf-frame" class="flex-1 w-full bg-slate-100" title="PDF preview"></iframe>
-        <div class="px-4 py-3 border-t border-slate-100 flex gap-2">
-          <button id="pdf-download" class="flex-1 py-2.5 rounded-xl bg-primary-800 text-white text-sm font-medium">下載 PDF</button>
-          <button id="pdf-close2" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">關閉</button>
+        <div id="pdf-body" class="flex-1 min-h-[40vh] bg-slate-50 flex flex-col">
+          <iframe id="pdf-frame" class="hidden flex-1 w-full min-h-[50vh] bg-white" title="PDF preview"></iframe>
+          <div id="pdf-mobile-hint" class="flex-1 flex flex-col items-center justify-center p-6 text-center gap-3">
+            <div class="text-4xl">📄</div>
+            <p class="text-sm text-slate-600 font-medium">PDF 已生成</p>
+            <p id="pdf-filename" class="text-xs text-slate-400 break-all"></p>
+            <p class="text-[11px] text-slate-400">手機可撳「開啟」用系統閱讀器預覽，或直接下載</p>
+          </div>
+        </div>
+        <div class="px-4 py-3 border-t border-slate-100 flex flex-col gap-2">
+          <button type="button" id="pdf-open" class="w-full py-3 rounded-xl bg-primary-800 text-white text-sm font-medium">開啟 / 預覽</button>
+          <button type="button" id="pdf-download" class="w-full py-3 rounded-xl border border-slate-200 text-sm font-medium">下載到手機</button>
+          <button type="button" id="pdf-close2" class="w-full py-2 text-sm text-slate-500">關閉</button>
         </div>
       </div>
     </div>
@@ -174,37 +183,103 @@ function closeReportModal() {
   if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 }
 
+function isMobileDevice() {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent));
+}
+
 function showPdfPreview(url, fileName, blob) {
-  if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+  if (pdfObjectUrl && pdfObjectUrl !== url) {
+    try { URL.revokeObjectURL(pdfObjectUrl); } catch (_) {}
+  }
   pdfObjectUrl = url;
+
   const modal = document.getElementById('pdf-modal');
-  const frame = document.getElementById('pdf-frame');
-  if (!modal || !frame) {
-    const a = document.createElement('a');
-    a.href = url; a.download = fileName; a.click();
+  if (!modal) {
+    // fallback: open or download
+    try {
+      const w = window.open(url, '_blank');
+      if (!w) triggerDownload(url, fileName);
+    } catch (_) {
+      triggerDownload(url, fileName);
+    }
     return;
   }
-  frame.src = url;
+
+  const frame = document.getElementById('pdf-frame');
+  const hint = document.getElementById('pdf-mobile-hint');
+  const nameEl = document.getElementById('pdf-filename');
+  if (nameEl) nameEl.textContent = fileName || 'expense.pdf';
+
+  const mobile = isMobileDevice();
+  // iOS/Android iframe 往往空白 → 預設用按鈕開啟系統閱讀器
+  if (frame && !mobile) {
+    frame.classList.remove('hidden');
+    if (hint) hint.classList.add('hidden');
+    frame.src = url;
+  } else {
+    if (frame) {
+      frame.classList.add('hidden');
+      frame.src = '';
+    }
+    if (hint) hint.classList.remove('hidden');
+  }
+
   modal.classList.remove('hidden');
   modal.classList.add('flex');
-  const dl = document.getElementById('pdf-download');
-  if (dl) {
-    dl.onclick = () => {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
+
+  const openBtn = document.getElementById('pdf-open');
+  const dlBtn = document.getElementById('pdf-download');
+
+  if (openBtn) {
+    openBtn.onclick = () => {
+      // 新分頁用 blob URL；iOS 會開系統 PDF viewer
+      const w = window.open(url, '_blank');
+      if (!w) {
+        // popup blocked → 用 <a target=_blank>
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    };
+  }
+  if (dlBtn) {
+    dlBtn.onclick = () => {
+      triggerDownload(url, fileName, blob);
       showToast('開始下載', 'success');
     };
   }
-  showToast('PDF 已就緒，可預覽後下載', 'success');
+
+  showToast('PDF 已生成', 'success');
+}
+
+function triggerDownload(url, fileName, blob) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName || 'expense.pdf';
+  // iOS Safari 有時忽略 download，仍盡量試
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // 再備一招：如果有 blob，用 msSave 或 share
+  if (blob && navigator.share && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    const file = new File([blob], fileName || 'expense.pdf', { type: 'application/pdf' });
+    navigator.share({ files: [file], title: fileName }).catch(() => {});
+  }
 }
 
 function closePdfModal() {
   const modal = document.getElementById('pdf-modal');
   const frame = document.getElementById('pdf-frame');
   if (frame) frame.src = '';
-  if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
 }
 
 function setupInstallPrompt() {

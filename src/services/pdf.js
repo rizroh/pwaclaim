@@ -21,6 +21,14 @@ export async function generatePDF() {
 
   showToast('正在生成 PDF（支援中文）...', 'info');
 
+  // Wait for Chinese web fonts so canvas text is not tofu/mojibake
+  try {
+    if (document.fonts && document.fonts.load) {
+      await document.fonts.load('500 28px "Noto Sans TC"');
+      await document.fonts.ready;
+    }
+  } catch (_) {}
+
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
@@ -64,37 +72,80 @@ export async function generatePDF() {
     doc.setFont('helvetica', 'bold');
     doc.text(`Total: HK$${totalAmount.toFixed(2)}`, pageWidth - margin, 36, { align: 'right' });
 
-    // Summary table
-    if (doc.autoTable) {
-      doc.autoTable({
-        startY: 48,
-        head: [['#', 'Date', 'Vendor', 'Category', 'Amount', 'Notes']],
-        body: expenses.map((e, i) => [
-          i + 1,
-          e.date,
-          e.vendor || '',
-          e.category || '',
-          'HK$' + Number(e.amount).toFixed(2),
-          (e.notes || '').substring(0, 40)
-        ]),
-        margin: { left: margin, right: margin },
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
-        alternateRowStyles: { fillColor: [248, 250, 252] }
-      });
-    } else {
-      let y = 50;
-      expenses.forEach((e, i) => {
-        doc.setFontSize(9);
-        doc.setTextColor(30, 41, 59);
-        doc.text(`${i + 1}. ${e.date}  ${e.vendor}  HK$${Number(e.amount).toFixed(2)}`, margin, y);
-        y += 7;
-        if (y > pageHeight - 20) {
-          doc.addPage();
-          y = 20;
-        }
-      });
-    }
+    // Summary table — draw manually so Chinese uses canvas (autoTable cannot render CJK)
+    const col = {
+      num: margin,
+      date: margin + 8,
+      vendor: margin + 32,
+      cat: margin + 95,
+      amt: pageWidth - margin - 28,
+      notes: margin + 32
+    };
+    let y = 48;
+    const rowH = 9;
+    const headerH = 8;
+
+    // header bar
+    doc.setFillColor(30, 64, 175);
+    doc.rect(margin, y - 5, pageWidth - margin * 2, headerH, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('#', col.num, y);
+    doc.text('Date', col.date, y);
+    doc.text('Vendor', col.vendor, y);
+    doc.text('Category', col.cat, y);
+    doc.text('Amount', col.amt, y, { align: 'right' });
+    y += headerH + 2;
+
+    expenses.forEach((e, i) => {
+      // new page if needed (leave room for notes line)
+      if (y > pageHeight - 22) {
+        doc.addPage();
+        y = 20;
+        doc.setFillColor(30, 64, 175);
+        doc.rect(margin, y - 5, pageWidth - margin * 2, headerH, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text('#', col.num, y);
+        doc.text('Date', col.date, y);
+        doc.text('Vendor', col.vendor, y);
+        doc.text('Category', col.cat, y);
+        doc.text('Amount', col.amt, y, { align: 'right' });
+        y += headerH + 2;
+      }
+
+      // zebra
+      if (i % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y - 4.5, pageWidth - margin * 2, rowH + (e.notes ? 5 : 0), 'F');
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+      doc.text(String(i + 1), col.num, y);
+      doc.text(String(e.date || ''), col.date, y);
+
+      // Chinese-safe fields via canvas
+      const vendor = (e.vendor || '').substring(0, 28);
+      const category = (e.category || '').substring(0, 14);
+      const notes = (e.notes || '').substring(0, 36);
+      addChineseText(doc, vendor, col.vendor, y, 18, '#0f172a', 58);
+      addChineseText(doc, category, col.cat, y, 18, '#334155', 28);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+      doc.text('HK$' + Number(e.amount || 0).toFixed(2), col.amt, y, { align: 'right' });
+
+      y += rowH;
+      if (notes) {
+        addChineseText(doc, notes, col.notes, y - 1, 15, '#64748b', 140);
+        y += 5;
+      }
+    });
 
     // ========== RECEIPT DETAIL PAGES ==========
     for (let i = 0; i < expenses.length; i++) {
