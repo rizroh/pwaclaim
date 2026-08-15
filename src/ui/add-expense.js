@@ -58,6 +58,7 @@ export function renderAddExpense(container) {
           🚀 Grok Vision 分析
         </button>
         <p id="ocr-note" class="hidden text-center text-[10px] text-emerald-600 mt-1">首次使用會下載語言模型，需時約 15-40 秒</p>
+        <div id="analyze-progress" class="hidden mt-2 space-y-1 text-xs"></div>
       </div>
     </div>
 
@@ -106,21 +107,32 @@ export function renderAddExpense(container) {
       儲存開支
     </button>
 
-    <!-- Camera Modal -->
-    <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
-      <div class="w-full max-w-md">
-        <div class="bg-slate-900 rounded-2xl overflow-hidden">
-          <video id="camera-video" autoplay playsinline class="w-full aspect-[4/3] object-cover"></video>
-          <canvas id="camera-canvas" class="hidden"></canvas>
+    <!-- Camera Modal：所見即所得（object-contain，唔再用 object-cover 裁切） -->
+    <div id="camera-modal" class="hidden fixed inset-0 bg-black z-[100] flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 safe-top">
+        <p class="text-white text-sm font-medium">影收據</p>
+        <button id="btn-close-camera" class="text-white/90 text-sm px-3 py-1.5 rounded-full bg-white/10">取消</button>
+      </div>
+      <div class="flex-1 relative flex items-center justify-center bg-black overflow-hidden min-h-0">
+        <video id="camera-video" autoplay playsinline muted
+          class="max-w-full max-h-full w-auto h-auto object-contain"></video>
+        <!-- 對齊輔助框：只係指南，唔裁切；影出嚟 = 你見到嘅成個畫面 -->
+        <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+          <div class="w-full max-w-sm aspect-[3/4] border-2 border-white/70 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] relative">
+            <span class="absolute -top-6 left-0 right-0 text-center text-[11px] text-white/80">將收據放入框內（參考）</span>
+            <div class="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-white rounded-tl"></div>
+            <div class="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-white rounded-tr"></div>
+            <div class="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-white rounded-bl"></div>
+            <div class="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-white rounded-br"></div>
+          </div>
         </div>
-        <div class="flex gap-3 mt-4">
-          <button id="btn-capture" class="flex-1 bg-white text-slate-900 font-semibold py-3.5 rounded-2xl active:scale-95 transition">
-            拍照
-          </button>
-          <button id="btn-close-camera" class="px-5 bg-slate-700 text-white font-medium py-3.5 rounded-2xl active:scale-95 transition">
-            取消
-          </button>
-        </div>
+        <canvas id="camera-canvas" class="hidden"></canvas>
+        <div id="camera-flash" class="hidden absolute inset-0 bg-white pointer-events-none"></div>
+      </div>
+      <div class="px-6 py-5 pb-8 bg-black/80 flex items-center justify-center gap-8 safe-bottom">
+        <button id="btn-switch-cam" type="button" class="w-12 h-12 rounded-full bg-white/15 text-white flex items-center justify-center text-lg" title="切換鏡頭">🔄</button>
+        <button id="btn-capture" type="button" class="w-18 h-18 w-16 h-16 rounded-full bg-white border-4 border-slate-300 active:scale-90 transition shadow-lg" title="拍照"></button>
+        <div class="w-12 h-12"></div>
       </div>
     </div>
   `;
@@ -136,6 +148,7 @@ export function renderAddExpense(container) {
   document.getElementById('btn-camera')?.addEventListener('click', startCamera);
   document.getElementById('btn-capture')?.addEventListener('click', capturePhoto);
   document.getElementById('btn-close-camera')?.addEventListener('click', stopCamera);
+  document.getElementById('btn-switch-cam')?.addEventListener('click', switchCamera);
   document.getElementById('btn-ocr')?.addEventListener('click', runOCR);
   document.getElementById('btn-gemini')?.addEventListener('click', runGemini);
   document.getElementById('btn-grok')?.addEventListener('click', runGrok);
@@ -174,18 +187,58 @@ async function handleFiles(e) {
   e.target.value = '';
 }
 
+let facingMode = 'environment'; // rear by default
+
 async function startCamera() {
   const modal = document.getElementById('camera-modal');
   try {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }
-    });
-    document.getElementById('camera-video').srcObject = cameraStream;
+    await openCameraStream(facingMode);
   } catch (err) {
-    stopCamera();
-    showToast('未能啟用鏡頭，請使用上傳功能', 'error');
+    console.warn('camera error', err);
+    // fallback without facingMode constraint
+    try {
+      await openCameraStream(null);
+    } catch (err2) {
+      stopCamera();
+      showToast('未能啟用鏡頭，請使用上傳功能', 'error');
+    }
+  }
+}
+
+async function openCameraStream(facing) {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  const constraints = {
+    audio: false,
+    video: facing
+      ? {
+          facingMode: { ideal: facing },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      : {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+  };
+  cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+  const video = document.getElementById('camera-video');
+  if (video) {
+    video.srcObject = cameraStream;
+    await video.play().catch(() => {});
+  }
+}
+
+async function switchCamera() {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  try {
+    await openCameraStream(facingMode);
+  } catch (err) {
+    showToast('無法切換鏡頭', 'warning');
   }
 }
 
@@ -194,6 +247,8 @@ function stopCamera() {
     cameraStream.getTracks().forEach(t => t.stop());
     cameraStream = null;
   }
+  const video = document.getElementById('camera-video');
+  if (video) video.srcObject = null;
   const modal = document.getElementById('camera-modal');
   if (modal) {
     modal.classList.add('hidden');
@@ -206,7 +261,21 @@ async function capturePhoto() {
   const canvas = document.getElementById('camera-canvas');
   if (!video || !canvas) return;
 
-  const maxW = 1200;
+  // 等一幀有真實解像度（避免 0x0）
+  if (!video.videoWidth || !video.videoHeight) {
+    showToast('鏡頭未就緒，請再試', 'warning');
+    return;
+  }
+
+  // 閃光效果
+  const flash = document.getElementById('camera-flash');
+  if (flash) {
+    flash.classList.remove('hidden');
+    setTimeout(() => flash.classList.add('hidden'), 120);
+  }
+
+  // 所見即所得：用完整 video frame（同 object-contain 預覽一致，唔裁切）
+  const maxW = 1600;
   let cw = video.videoWidth;
   let ch = video.videoHeight;
   if (cw > maxW) {
@@ -215,12 +284,14 @@ async function capturePhoto() {
   }
   canvas.width = cw;
   canvas.height = ch;
-  canvas.getContext('2d').drawImage(video, 0, 0, cw, ch);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, cw, ch);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
 
   if (state.currentImages.length < MAX_IMAGES) {
     state.currentImages.push(dataUrl);
     renderPreviews();
+    showToast('已拍照', 'success');
   } else {
     showToast(`最多 ${MAX_IMAGES} 張相片`, 'error');
   }
@@ -289,15 +360,28 @@ async function runOCR() {
 async function runGemini() {
   if (state.currentImages.length === 0) return;
   const btn = document.getElementById('btn-gemini');
+  const progressEl = document.getElementById('analyze-progress');
   const original = btn.innerHTML;
   btn.disabled = true;
+  if (progressEl) {
+    progressEl.classList.remove('hidden');
+    progressEl.innerHTML = state.currentImages.map((_, i) =>
+      `<div class="flex items-center gap-2 text-slate-500"><span>⏳</span><span>第 ${i + 1} 張：等候中</span></div>`
+    ).join('');
+  }
 
   try {
-    const result = await analyzeMultipleReceipts(state.currentImages, (current, total) => {
+    const result = await analyzeMultipleReceipts(state.currentImages, (current, total, meta) => {
       btn.innerHTML = `分析中 ${current}/${total}...`;
+      if (progressEl && meta?.statuses) {
+        progressEl.innerHTML = meta.statuses.map(s => {
+          const icon = s.state === 'ok' ? '✅' : s.state === 'fail' ? '❌' : s.state === 'running' ? '🔄' : '⏳';
+          const label = s.state === 'ok' ? '成功' : s.state === 'fail' ? ('失敗 ' + (s.message || '')).slice(0, 40) : s.state === 'running' ? '分析中…' : '等候中';
+          return `<div class="flex items-center gap-2 ${s.state==='fail'?'text-red-600':s.state==='ok'?'text-emerald-600':'text-slate-500'}"><span>${icon}</span><span>第 ${s.index + 1} 張：${label}</span></div>`;
+        }).join('');
+      }
     });
 
-    // Keep only successful images
     if (result.failCount > 0) {
       state.currentImages = result.successIndices.map(i => state.currentImages[i]);
       renderPreviews();
@@ -310,9 +394,7 @@ async function runGemini() {
     if (result.notes) document.getElementById('f-notes').value = result.notes;
 
     let msg = `完成！成功 ${result.successCount} 張，總金額 HK$${result.amount.toFixed(2)}`;
-    if (result.failCount > 0) {
-      msg += `｜已抽走 ${result.failCount} 張失敗相`;
-    }
+    if (result.failCount > 0) msg += `｜已抽走 ${result.failCount} 張失敗相`;
     showToast(msg, 'info');
   } catch (err) {
     showToast('分析失敗: ' + err.message, 'error');

@@ -1,12 +1,35 @@
 /**
- * Gemini AI Service
- * Calls the existing /api/gemini serverless function
+ * Gemini AI Service – with 429 retry + detailed progress
  */
 
 import { showToast } from '../ui/toast.js';
 
+async function fetchWithRetry(url, options, { retries = 3, baseDelay = 2000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) return { res, data };
+
+    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
+    const is429 = res.status === 429 || /quota|rate|resource.exhausted/i.test(String(msg));
+
+    if (is429 && attempt < retries) {
+      const wait = baseDelay * Math.pow(2, attempt);
+      showToast(`額度繁忙，${Math.round(wait / 1000)} 秒後重試…`, 'warning');
+      await new Promise(r => setTimeout(r, wait));
+      lastErr = new Error(msg + (data.modelUsed ? ` [${data.modelUsed}]` : ''));
+      continue;
+    }
+
+    throw new Error(msg + (data.modelUsed ? ` [${data.modelUsed}]` : ''));
+  }
+  throw lastErr || new Error('請求失敗');
+}
+
 export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemini-3.5-flash-lite') {
-  const res = await fetch('/api/gemini', {
+  const { data } = await fetchWithRetry('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -16,18 +39,11 @@ export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemi
       model
     })
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
-    const modelInfo = data.modelUsed ? ` [${data.modelUsed}]` : '';
-    throw new Error(msg + modelInfo);
-  }
   return data.data;
 }
 
 export async function generateSummary(expenses, userApiKey = '', model = 'gemini-3.5-flash-lite') {
-  const res = await fetch('/api/gemini', {
+  const { data } = await fetchWithRetry('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -36,19 +52,13 @@ export async function generateSummary(expenses, userApiKey = '', model = 'gemini
       userApiKey,
       model
     })
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data.error || data.details?.error?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
+  }, { retries: 2 });
   return data.data;
 }
 
 /**
- * Analyze multiple images, sum amounts, merge vendors/categories
- * Now surfaces the real error messages instead of a generic failure.
+ * onProgress(current, total, status) 
+ * status: { index, state: 'pending'|'running'|'ok'|'fail', message? }
  */
 export async function analyzeMultipleReceipts(images, onProgress) {
   const userKey = localStorage.getItem('user_gemini_api_key') || '';
@@ -63,54 +73,55 @@ export async function analyzeMultipleReceipts(images, onProgress) {
   const successIndices = [];
   const failIndices = [];
   const errorMessages = [];
+  const statuses = images.map((_, i) => ({ index: i, state: 'pending' }));
+
+  const emit = (i, state, message) => {
+    statuses[i] = { index: i, state, message };
+    if (onProgress) onProgress(i + 1, total, { statuses: [...statuses], current: i });
+  };
 
   for (let i = 0; i < total; i++) {
-    if (onProgress) onProgress(i + 1, total);
-    showToast(`正在分析第 ${i + 1}/${total} 張收據...`, 'info');
+    emit(i, 'running');
+    showToast(`分析中 ${i + 1}/${total}…`, 'info');
 
     try {
       const parsed = await analyzeReceipt(images[i], userKey, model);
       const data = typeof parsed === 'string' ? JSON.parse(parsed) : parsed;
-
-      // Accept even if amount is missing / zero – still count as success if we got any data
       const amt = parseFloat(data.amount);
-      if (!isNaN(amt) && amt > 0) {
-        totalAmount += amt;
-      }
 
+      if (!isNaN(amt) && amt > 0) totalAmount += amt;
       if (data.vendor) vendors.push(data.vendor);
       if (data.category) categories.push(data.category);
       if (data.notes) notesList.push(data.notes);
       if (data.date && (!latestDate || data.date > latestDate)) latestDate = data.date;
 
-      // Consider success if we got at least vendor or amount or date
       if ((data.vendor && data.vendor !== '未知商戶') || (!isNaN(amt) && amt > 0) || data.date) {
         successIndices.push(i);
+        emit(i, 'ok', data.vendor || 'OK');
       } else {
         failIndices.push(i);
-        errorMessages.push(`第${i + 1}張: AI 回傳資料不完整`);
+        errorMessages.push(`第${i + 1}張: 資料不完整`);
+        emit(i, 'fail', '資料不完整');
       }
     } catch (err) {
       console.warn(`Image ${i + 1} failed:`, err.message);
       failIndices.push(i);
       errorMessages.push(`第${i + 1}張: ${err.message}`);
+      emit(i, 'fail', err.message);
     }
 
-    if (i < total - 1) await new Promise(r => setTimeout(r, 800));
+    if (i < total - 1) await new Promise(r => setTimeout(r, 1000));
   }
 
   if (successIndices.length === 0) {
-    // Show the real underlying errors instead of a generic message
-    const detail = errorMessages.length > 0
-      ? errorMessages.slice(0, 3).join(' | ')
-      : '未知錯誤';
+    const detail = errorMessages.length > 0 ? errorMessages.slice(0, 3).join(' | ') : '未知錯誤';
     throw new Error(detail);
   }
 
   let topCategory = 'Other';
   if (categories.length > 0) {
     const freq = {};
-    categories.forEach(c => freq[c] = (freq[c] || 0) + 1);
+    categories.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
     topCategory = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
   }
 
@@ -133,6 +144,7 @@ export async function analyzeMultipleReceipts(images, onProgress) {
     successIndices,
     failIndices,
     successCount: successIndices.length,
-    failCount: failIndices.length
+    failCount: failIndices.length,
+    statuses
   };
 }

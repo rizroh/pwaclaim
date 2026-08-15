@@ -182,8 +182,15 @@ export async function generatePDF() {
 
     const safeName = claimant.replace(/\s+/g, '') || 'User';
     const fileName = `Expense_Claim_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`;
-    doc.save(fileName);
-    showToast(`PDF 已生成：${fileName}`, 'success');
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    // Preview modal if available
+    if (typeof window.showPdfPreview === 'function') {
+      window.showPdfPreview(url, fileName, blob);
+    } else {
+      doc.save(fileName);
+      showToast(`PDF 已生成：${fileName}`, 'success');
+    }
   } catch (err) {
     console.error('PDF generation failed', err);
     showToast('PDF 生成失敗：' + err.message, 'error');

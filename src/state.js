@@ -1,5 +1,5 @@
 /**
- * Simple reactive state (no framework needed)
+ * Simple reactive state
  */
 
 const listeners = new Set();
@@ -10,6 +10,10 @@ export const state = {
   editingId: null,
   isLoading: false,
   loadingMsg: '',
+  filterMonth: '',
+  filterCategory: '',
+  filterQ: '',
+  online: typeof navigator !== 'undefined' ? navigator.onLine : true
 };
 
 export function setState(partial) {
