@@ -1,20 +1,18 @@
-// Vercel Serverless Function: /api/grok-vision
-// Supports:
-// 1. User's SuperGrok OAuth access_token (preferred)
-// 2. Fallback to system XAI_API_KEY
+// Vercel Serverless: /api/grok-vision
+// API Key only (user key or XAI_API_KEY) — OAuth removed
+
+import { applyCors, rejectCors } from '../lib/cors.js';
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '8mb'
+      sizeLimit: '6mb'
     }
   }
 };
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (!applyCors(req, res)) return rejectCors(res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -26,17 +24,15 @@ export default async function handler(req, res) {
     }
     body = body || {};
 
-    const { imageBase64, userAccessToken, userApiKey, model: requestedModel } = body;
+    const { imageBase64, userApiKey, model: requestedModel } = body;
 
-    // Priority: 1) user's OAuth token  2) user's API key  3) system env key
-    const bearerToken =
-      (userAccessToken && String(userAccessToken).trim()) ||
+    const apiKey =
       (userApiKey && String(userApiKey).trim()) ||
       process.env.XAI_API_KEY;
 
-    if (!bearerToken) {
+    if (!apiKey) {
       return res.status(401).json({
-        error: '未登入 Grok，亦未設定 API Key。請先按「登入」用 SuperGrok 帳戶登入，或在設定頁填入 xAI API Key。'
+        error: '未設定 xAI API Key。請到設定頁填入，或在 Vercel 設定 XAI_API_KEY。'
       });
     }
 
@@ -44,9 +40,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '缺少 imageBase64' });
     }
 
-    let imageUrl = imageBase64;
-    if (!imageBase64.startsWith('data:')) {
-      imageUrl = 'data:image/jpeg;base64,' + imageBase64;
+    // size guard
+    const raw = String(imageBase64);
+    if (raw.length > 5_500_000) {
+      return res.status(400).json({ error: '圖片太大，請壓縮後再試' });
+    }
+
+    let imageUrl = raw;
+    if (!raw.startsWith('data:')) {
+      imageUrl = 'data:image/jpeg;base64,' + raw;
     }
 
     const allowedModels = [
@@ -67,29 +69,19 @@ export default async function handler(req, res) {
         {
           role: 'user',
           content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageUrl,
-                detail: 'high'
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
+            { type: 'text', text: prompt }
           ]
         }
       ],
-      temperature: 0.1,
-      max_tokens: 600
+      temperature: 0.1
     };
 
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + bearerToken
+        Authorization: 'Bearer ' + apiKey
       },
       body: JSON.stringify(payload)
     });
@@ -97,43 +89,39 @@ export default async function handler(req, res) {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.error('Grok Vision API Error:', JSON.stringify(data).slice(0, 600));
-      if (response.status === 401 || response.status === 403) {
-        return res.status(response.status).json({
-          error: 'Grok token 無效或已過期，請重新登入 SuperGrok',
-          modelUsed: model,
-          status: response.status,
-          details: data.error?.message || data.message
-        });
-      }
+      const msg = data.error?.message || data.error || JSON.stringify(data).slice(0, 200);
       return res.status(response.status).json({
-        error: data.error?.message || data.message || 'Grok Vision API 回傳錯誤',
-        modelUsed: model,
-        status: response.status
+        error: msg,
+        modelUsed: model
       });
     }
 
-    const text = data.choices?.[0]?.message?.content || '';
+    let content = data.choices?.[0]?.message?.content || '';
+    // strip markdown fences if any
+    content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
     let parsed;
     try {
-      const cleaned = text.replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch (e) {
-      parsed = { raw: text, error: 'JSON parse failed', amount: 0, vendor: '', date: '' };
+      parsed = JSON.parse(content);
+    } catch (_) {
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) {
+        try { parsed = JSON.parse(m[0]); } catch (__) {
+          return res.status(502).json({ error: 'Grok 回傳非 JSON', raw: content.slice(0, 300) });
+        }
+      } else {
+        return res.status(502).json({ error: 'Grok 回傳非 JSON', raw: content.slice(0, 300) });
+      }
     }
 
     return res.status(200).json({
       success: true,
       data: parsed,
       modelUsed: model,
-      authMethod: userAccessToken ? 'oauth' : (userApiKey ? 'user-key' : 'system-key')
+      authMethod: userApiKey ? 'user-key' : 'system-key'
     });
-
-  } catch (error) {
-    console.error('Grok Vision Function Error:', error);
-    return res.status(500).json({
-      error: '伺服器內部錯誤: ' + (error.message || String(error))
-    });
+  } catch (err) {
+    console.error('grok-vision error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
   }
 }

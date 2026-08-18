@@ -1,3 +1,5 @@
+import { applyCors, rejectCors } from '../lib/cors.js';
+
 // Vercel Serverless Function: /api/gemini
 // Hardened version – always returns JSON, better error messages
 
@@ -10,10 +12,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (!applyCors(req, res)) return rejectCors(res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
