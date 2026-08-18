@@ -1,7 +1,3 @@
-/**
- * Simple reactive state
- */
-
 const listeners = new Set();
 
 export const state = {
@@ -18,7 +14,7 @@ export const state = {
 
 export function setState(partial) {
   Object.assign(state, partial);
-  listeners.forEach(fn => fn(state));
+  listeners.forEach((fn) => fn(state));
 }
 
 export function subscribe(fn) {

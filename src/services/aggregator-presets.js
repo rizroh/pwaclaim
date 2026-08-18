@@ -1,5 +1,3 @@
-/** Built-in aggregator presets — base URLs fixed */
-
 export const AGGREGATOR_PRESETS = {
   openrouter: {
     id: 'openrouter',
@@ -22,14 +20,13 @@ export const AGGREGATOR_PRESETS = {
     defaultModel: 'accounts/fireworks/models/llama-v3p2-11b-vision-instruct',
     keyPlaceholder: 'fw_...'
   },
-  /** OpenCode Console Inference API — OpenAI-compatible */
   opencode: {
     id: 'opencode',
     label: 'OpenCode',
     baseUrl: 'https://opencode.ai/inference/openai/v1',
     defaultModel: 'kimi-k2.5',
     keyPlaceholder: 'OpenCode Console API Key'
-  },
+  }
 };
 
 export function listAggregatorPresets() {
@@ -43,7 +40,6 @@ export function getAggregatorPreset(id) {
 export function matchPresetByBaseUrl(baseUrl) {
   const u = String(baseUrl || '').replace(/\/+$/, '');
   for (const p of Object.values(AGGREGATOR_PRESETS)) {
-    if (p.id === 'custom') continue;
     if (p.baseUrl.replace(/\/+$/, '') === u) return p.id;
   }
   return 'openrouter';

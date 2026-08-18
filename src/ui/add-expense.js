@@ -1,20 +1,10 @@
-/**
- * Add / Edit Expense — shell (media + analyze modules)
- */
-
 import { state, setState } from '../state.js';
 import { switchView } from '../app.js';
 import { showToast } from './toast.js';
 import { saveExpenses } from '../services/storage.js';
 import { migrateAggregatorKeys } from '../services/providers.js';
 import {
-  MAX_IMAGES,
-  stopCamera,
-  startCamera,
-  switchCamera,
-  capturePhoto,
-  handleFiles,
-  renderPreviews
+  MAX_IMAGES, stopCamera, startCamera, switchCamera, capturePhoto, handleFiles, renderPreviews
 } from './add-expense-media.js';
 import { providerButtonsHtml, bindAnalyzeButtons, fillForm } from './add-expense-analyze.js';
 
@@ -28,7 +18,6 @@ export function renderAddExpense(container) {
       <h2 class="font-semibold text-lg">${isEdit ? '編輯開支' : '新增開支'}</h2>
       <div class="w-12"></div>
     </div>
-
     <div class="bg-white rounded-3xl border border-slate-200 p-4 mb-4 shadow-sm">
       <p class="text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-3">收據相片（最多 ${MAX_IMAGES} 張）</p>
       <div id="previews" class="flex flex-wrap gap-2.5 mb-3 min-h-[76px]"></div>
@@ -47,7 +36,6 @@ export function renderAddExpense(container) {
         <div id="analyze-progress" class="hidden mt-2 space-y-1 text-xs"></div>
       </div>
     </div>
-
     <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-3.5">
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -69,14 +57,14 @@ export function renderAddExpense(container) {
       <div>
         <label class="block text-[11px] font-semibold text-slate-500 mb-1">類別</label>
         <select id="f-category" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none">
-          <option value="Meals">🍽️ 餐飲</option>
-          <option value="Transport">🚕 交通</option>
-          <option value="Office">📎 辦公</option>
-          <option value="Professional Services">💼 專業服務</option>
-          <option value="Marketing">📣 市場推廣</option>
-          <option value="Travel">✈️ 差旅</option>
-          <option value="Utilities">💡 水電煤</option>
-          <option value="Other">📦 其他</option>
+          <option value="Meals">餐飲</option>
+          <option value="Transport">交通</option>
+          <option value="Office">辦公</option>
+          <option value="Professional Services">專業服務</option>
+          <option value="Marketing">市場推廣</option>
+          <option value="Travel">差旅</option>
+          <option value="Utilities">水電煤</option>
+          <option value="Other">其他</option>
         </select>
       </div>
       <div>
@@ -84,9 +72,7 @@ export function renderAddExpense(container) {
         <textarea id="f-notes" rows="2" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none"></textarea>
       </div>
     </div>
-
     <button type="button" id="btn-save" class="mt-5 w-full bg-primary-800 text-white font-semibold py-4 rounded-2xl text-sm shadow-lg shadow-primary-800/25">儲存開支</button>
-
     <div id="camera-modal" class="hidden fixed inset-0 bg-black z-[100] flex flex-col">
       <div class="flex items-center justify-between px-4 py-3">
         <p class="text-white text-sm font-medium">影收據</p>
@@ -121,14 +107,9 @@ export function renderAddExpense(container) {
   document.getElementById('btn-save')?.addEventListener('click', save);
   bindAnalyzeButtons();
 
-  const existing = isEdit
-    ? state.expenses.find((e) => e.id === state.editingId)
-    : null;
-  if (existing) {
-    fillForm(existing);
-  } else {
-    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
-  }
+  const existing = isEdit ? state.expenses.find((e) => e.id === state.editingId) : null;
+  if (existing) fillForm(existing);
+  else document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
   renderPreviews();
 }
 
@@ -138,37 +119,25 @@ async function save() {
   const vendor = document.getElementById('f-vendor').value.trim();
   const category = document.getElementById('f-category').value;
   const notes = document.getElementById('f-notes').value.trim();
-
   if (!date || !amount || amount <= 0 || !vendor) {
     showToast('請填妥日期、金額同商戶名稱', 'error');
     return;
   }
-
   const id = state.editingId || ('exp_' + Date.now());
-  const existing = state.editingId
-    ? state.expenses.find(e => e.id === state.editingId)
-    : null;
-
+  const existing = state.editingId ? state.expenses.find((e) => e.id === state.editingId) : null;
   const expense = {
-    id,
-    date,
-    amount,
-    vendor,
-    category,
-    notes,
+    id, date, amount, vendor, category, notes,
     images: [...state.currentImages],
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-
   if (state.editingId) {
-    const idx = state.expenses.findIndex(e => e.id === state.editingId);
+    const idx = state.expenses.findIndex((e) => e.id === state.editingId);
     if (idx >= 0) state.expenses[idx] = expense;
     else state.expenses.unshift(expense);
   } else {
     state.expenses.unshift(expense);
   }
-
   try {
     await saveExpenses(state.expenses);
     stopCamera();

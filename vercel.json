@@ -6,26 +6,11 @@
     {
       "source": "/(.*)",
       "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
-        {
-          "key": "Permissions-Policy",
-          "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
-        },
-        {
-          "key": "Cross-Origin-Opener-Policy",
-          "value": "same-origin"
-        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         {
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com https://tessdata.projectnaptha.com; worker-src 'self' blob:; child-src 'self' blob:"
@@ -34,25 +19,10 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/gemini",
-      "destination": "/api/gemini"
-    },
-    {
-      "source": "/api/grok-vision",
-      "destination": "/api/grok-vision"
-    },
-    {
-      "source": "/api/models",
-      "destination": "/api/models"
-    },
-    {
-      "source": "/api/openai-compatible",
-      "destination": "/api/openai-compatible"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/gemini", "destination": "/api/gemini" },
+    { "source": "/api/grok-vision", "destination": "/api/grok-vision" },
+    { "source": "/api/models", "destination": "/api/models" },
+    { "source": "/api/openai-compatible", "destination": "/api/openai-compatible" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

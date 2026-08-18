@@ -1,7 +1,3 @@
-/**
- * Storage Service – IndexedDB primary, migrate from localStorage
- */
-
 import { get, set, del } from 'idb-keyval';
 
 const EXPENSES_KEY = 'expenses_v2';
@@ -22,9 +18,7 @@ export async function initStorage() {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          await set(EXPENSES_KEY, parsed);
-        }
+        if (Array.isArray(parsed)) await set(EXPENSES_KEY, parsed);
       }
     }
   } catch (e) {
@@ -37,10 +31,8 @@ export async function loadExpenses() {
     const data = await get(EXPENSES_KEY);
     if (Array.isArray(data)) return data;
     const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw);
-    return [];
-  } catch (e) {
-    console.error('Failed to load expenses', e);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
     try {
       const raw = localStorage.getItem(LS_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -54,7 +46,6 @@ export async function saveExpenses(expenses) {
   try {
     await set(EXPENSES_KEY, expenses);
   } catch (e) {
-    console.error('IDB save failed', e);
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(expenses));
     } catch (e2) {
@@ -67,12 +58,7 @@ export async function saveExpenses(expenses) {
 }
 
 export async function exportAllData() {
-  const expenses = await loadExpenses();
-  return {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    expenses
-  };
+  return { version: 2, exportedAt: new Date().toISOString(), expenses: await loadExpenses() };
 }
 
 export function sanitizeExpenseId(id, fallbackIndex) {
@@ -111,13 +97,12 @@ export function sanitizeExpense(raw, index) {
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1e9) return null;
   const vendor = clipText(raw.vendor, IMPORT_LIMITS.maxText);
   if (!vendor) return null;
-  const category = ALLOWED_CATS.has(raw.category) ? raw.category : 'Other';
   return {
     id: sanitizeExpenseId(raw.id, index),
     date,
     amount: Math.round(amount * 100) / 100,
     vendor,
-    category,
+    category: ALLOWED_CATS.has(raw.category) ? raw.category : 'Other',
     notes: clipText(raw.notes, IMPORT_LIMITS.maxText),
     images: sanitizeImages(raw.images),
     createdAt: clipText(raw.createdAt, 40) || new Date().toISOString(),
@@ -127,10 +112,7 @@ export function sanitizeExpense(raw, index) {
 
 export async function importAllData(payload, opts = {}) {
   const byteLength = opts.byteLength ?? (typeof payload === 'string' ? new Blob([payload]).size : 0);
-  if (byteLength > IMPORT_LIMITS.maxBytes) {
-    throw new Error('檔案太大（上限 15MB）');
-  }
-
+  if (byteLength > IMPORT_LIMITS.maxBytes) throw new Error('檔案太大（上限 15MB）');
   let data = payload;
   if (typeof payload === 'string') {
     if (payload.length > IMPORT_LIMITS.maxBytes) throw new Error('檔案太大（上限 15MB）');
@@ -138,10 +120,7 @@ export async function importAllData(payload, opts = {}) {
   }
   const list = Array.isArray(data) ? data : (data && data.expenses);
   if (!Array.isArray(list)) throw new Error('匯入格式不正確');
-  if (list.length > IMPORT_LIMITS.maxExpenses) {
-    throw new Error('記錄太多（上限 ' + IMPORT_LIMITS.maxExpenses + ' 筆）');
-  }
-
+  if (list.length > IMPORT_LIMITS.maxExpenses) throw new Error('記錄太多（上限 ' + IMPORT_LIMITS.maxExpenses + ' 筆）');
   const seen = new Set();
   const cleaned = [];
   list.forEach((row, i) => {
@@ -151,7 +130,7 @@ export async function importAllData(payload, opts = {}) {
     seen.add(e.id);
     cleaned.push(e);
   });
-  if (cleaned.length === 0) throw new Error('檔案內冇有效開支記錄');
+  if (!cleaned.length) throw new Error('檔案內冇有效開支記錄');
   await saveExpenses(cleaned);
   return cleaned.length;
 }

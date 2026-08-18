@@ -1,6 +1,6 @@
 {
-  "name": "expenseepwa",
-  "version": "2.1.0",
+  "name": "pwaclaim",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {

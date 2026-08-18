@@ -1,12 +1,8 @@
-/**
- * Settings – dynamic models, export/import, keys
- */
-
 import { showToast } from './toast.js';
 import { exportAllData, importAllData, clearAllData, loadExpenses, IMPORT_LIMITS } from '../services/storage.js';
 import { API_HEADERS } from '../services/api-headers.js';
 import { state, setState } from '../state.js';
-import { AGGREGATOR_PRESETS, listAggregatorPresets, getAggregatorPreset, matchPresetByBaseUrl } from '../services/aggregator-presets.js';
+import { listAggregatorPresets, getAggregatorPreset, matchPresetByBaseUrl } from '../services/aggregator-presets.js';
 
 export function renderSettings(container) {
   const geminiKey = localStorage.getItem('user_gemini_api_key') || '';
@@ -17,7 +13,7 @@ export function renderSettings(container) {
   const orModel = localStorage.getItem('aggregator_model') || localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
   const orBase = localStorage.getItem('aggregator_base_url') || localStorage.getItem('openrouter_base_url') || 'https://openrouter.ai/api/v1';
   const orPreset = localStorage.getItem('aggregator_preset') || matchPresetByBaseUrl(orBase);
-  const presetOpts = listAggregatorPresets().map(p =>
+  const presetOpts = listAggregatorPresets().map((p) =>
     `<option value="${p.id}" ${p.id === orPreset ? 'selected' : ''}>${p.label}</option>`
   ).join('');
 
@@ -27,21 +23,21 @@ export function renderSettings(container) {
       <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
         <label class="block text-sm font-medium mb-1">Gemini API Key（可選）</label>
         <p class="text-xs text-slate-500 mb-3">優先使用你嘅 Key。</p>
-        <input id="gemini-key" type="password" value="${geminiKey}" placeholder="AIza..."
+        <input id="gemini-key" type="password" value="${escapeAttr(geminiKey)}" placeholder="AIza..."
           class="w-full border border-slate-200 focus:border-primary-500 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
         <div class="flex items-center justify-between mb-1.5">
           <label class="block text-xs font-medium text-slate-500">Gemini 模型（動態）</label>
           <button type="button" id="btn-refresh-models" class="text-[11px] text-primary-700 font-medium">重新整理列表</button>
         </div>
         <select id="gemini-model" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none">
-          <option value="${geminiModel}">${geminiModel}</option>
+          <option value="${escapeAttr(geminiModel)}">${escapeAttr(geminiModel)}</option>
         </select>
         <p id="models-status" class="text-[10px] text-slate-400 mt-1.5">載入模型中…</p>
       </div>
 
       <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
         <label class="block text-sm font-medium mb-1">xAI API Key（Grok Vision）</label>
-        <input id="xai-key" type="password" value="${xaiKey}" placeholder="xai-..."
+        <input id="xai-key" type="password" value="${escapeAttr(xaiKey)}" placeholder="xai-..."
           class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
         <label class="block text-xs font-medium text-slate-500 mb-1.5">Grok 模型</label>
         <select id="grok-model" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none">
@@ -51,37 +47,31 @@ export function renderSettings(container) {
         </select>
       </div>
 
-      <!-- LLM Aggregator -->
       <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
         <label class="block text-sm font-medium mb-1">LLM Aggregator</label>
-        <p class="text-xs text-slate-500 mb-3">OpenRouter / Together / Fireworks 或自訂 OpenAI-compatible 端點。分析收據請揀 <b>Vision</b> 模型。</p>
-
+        <p class="text-xs text-slate-500 mb-3">OpenRouter / Together / Fireworks / OpenCode。分析收據請揀 Vision 模型。</p>
         <label class="block text-xs font-medium text-slate-500 mb-1.5">供應商 Preset</label>
         <select id="or-preset" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none mb-3">
           ${presetOpts}
         </select>
-
         <label class="block text-xs font-medium text-slate-500 mb-1.5">API Key</label>
-        <input id="or-key" type="password" value="${orKey}" placeholder="API Key"
+        <input id="or-key" type="password" value="${escapeAttr(orKey)}" placeholder="API Key"
           class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
-
         <label class="block text-xs font-medium text-slate-500 mb-1.5">Base URL</label>
-        <input id="or-base" type="url" value="${orBase}" placeholder="https://openrouter.ai/api/v1"
-          class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
-
+        <input id="or-base" type="url" value="${escapeAttr(orBase)}" readonly
+          class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3 bg-slate-50">
         <div class="flex items-center justify-between mb-1.5">
           <label class="block text-xs font-medium text-slate-500">模型（動態列表）</label>
           <button type="button" id="btn-refresh-agg-models" class="text-[11px] text-primary-700 font-medium">重新整理列表</button>
         </div>
         <select id="or-model" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none mb-1">
-          <option value="${orModel}">${orModel}</option>
+          <option value="${escapeAttr(orModel)}">${escapeAttr(orModel)}</option>
         </select>
         <p id="agg-models-status" class="text-[10px] text-slate-400 mt-1">填 Key 後撳「重新整理」載入模型；Vision 模型會排前面。</p>
       </div>
 
       <button id="btn-save-key" class="w-full bg-primary-800 text-white py-3 rounded-2xl text-sm font-medium">儲存設定</button>
 
-      <!-- Export / Import -->
       <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2">
         <p class="text-sm font-medium">資料備份</p>
         <p class="text-xs text-slate-500 mb-2">匯出 JSON 備份；換機可匯入還原（含相片）。</p>
@@ -98,7 +88,6 @@ export function renderSettings(container) {
         <p>• 資料存在本機 IndexedDB</p>
         <p>• 建議模型：gemini-3.5-flash-lite</p>
       </div>
-
       <button id="btn-clear" class="w-full border border-red-200 text-red-600 py-3 rounded-2xl text-sm font-medium">清除所有本地數據</button>
     </div>
   `;
@@ -115,24 +104,22 @@ export function renderSettings(container) {
     const preset = getAggregatorPreset(id);
     const baseEl = document.getElementById('or-base');
     const keyEl = document.getElementById('or-key');
-    if (baseEl && preset.baseUrl) baseEl.value = preset.baseUrl;
-    if (baseEl) baseEl.readOnly = true;
+    if (baseEl && preset.baseUrl) {
+      baseEl.value = preset.baseUrl;
+      baseEl.readOnly = true;
+    }
     if (keyEl && preset.keyPlaceholder) keyEl.placeholder = preset.keyPlaceholder;
     if (preset.defaultModel) {
       const sel = document.getElementById('or-model');
-      if (sel && ![...sel.options].some(o => o.value === preset.defaultModel)) {
+      if (sel && ![...sel.options].some((o) => o.value === preset.defaultModel)) {
         const opt = document.createElement('option');
         opt.value = preset.defaultModel;
         opt.textContent = preset.defaultModel + ' (default)';
         sel.insertBefore(opt, sel.firstChild);
-        sel.value = preset.defaultModel;
-      } else if (sel) sel.value = preset.defaultModel;
+      }
+      if (sel) sel.value = preset.defaultModel;
     }
   });
-  // lock base url for non-custom
-  const initPreset = document.getElementById('or-preset')?.value || 'openrouter';
-  const baseEl0 = document.getElementById('or-base');
-  if (baseEl0) baseEl0.readOnly = true;
 
   document.getElementById('btn-refresh-agg-models')?.addEventListener('click', () => {
     loadAggregatorModels(
@@ -155,21 +142,18 @@ export function renderSettings(container) {
     const orKeyVal = document.getElementById('or-key')?.value.trim() || '';
     const orPresetVal = document.getElementById('or-preset')?.value || 'openrouter';
     const preset = getAggregatorPreset(orPresetVal);
-    const orBaseVal = (document.getElementById('or-base')?.value.trim() || preset.baseUrl || 'https://openrouter.ai/api/v1');
-    const orModelVal = document.getElementById('or-model')?.value.trim() || preset.defaultModel || 'google/gemini-2.0-flash-001';
+    const orBaseVal = preset.baseUrl || 'https://openrouter.ai/api/v1';
+    const orModelVal = document.getElementById('or-model')?.value.trim() || preset.defaultModel;
     localStorage.setItem('aggregator_preset', orPresetVal);
     if (orKeyVal) {
       localStorage.setItem('user_aggregator_api_key', orKeyVal);
-      localStorage.setItem('user_openrouter_api_key', orKeyVal); // legacy alias
+      localStorage.setItem('user_openrouter_api_key', orKeyVal);
     } else {
       localStorage.removeItem('user_aggregator_api_key');
       localStorage.removeItem('user_openrouter_api_key');
     }
     localStorage.setItem('aggregator_base_url', orBaseVal);
     localStorage.setItem('aggregator_model', orModelVal);
-    localStorage.setItem('openrouter_base_url', orBaseVal);
-    localStorage.setItem('openrouter_model', orModelVal);
-
     showToast('設定已儲存', 'success');
   });
 
@@ -192,11 +176,8 @@ export function renderSettings(container) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      if (file.size > IMPORT_LIMITS.maxBytes) {
-        throw new Error('檔案太大（上限 15MB）');
-      }
-      const text = await file.text();
-      const n = await importAllData(text, { byteLength: file.size });
+      if (file.size > IMPORT_LIMITS.maxBytes) throw new Error('檔案太大（上限 15MB）');
+      const n = await importAllData(await file.text(), { byteLength: file.size });
       state.expenses = await loadExpenses();
       setState({ expenses: state.expenses });
       showToast(`已匯入 ${n} 筆開支`, 'success');
@@ -216,6 +197,10 @@ export function renderSettings(container) {
   });
 }
 
+function escapeAttr(s) {
+  return String(s || '').replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<');
+}
+
 async function loadGeminiModels(userKey, selectedId) {
   const select = document.getElementById('gemini-model');
   const status = document.getElementById('models-status');
@@ -231,58 +216,51 @@ async function loadGeminiModels(userKey, selectedId) {
     const defaultModel = data.defaultModel || 'gemini-3.5-flash-lite';
     const current = selectedId || defaultModel;
     if (!models.length) {
-      select.innerHTML = ['gemini-3.5-flash-lite','gemini-3.5-flash','gemini-2.5-flash']
-        .map(id => `<option value="${id}" ${id===current?'selected':''}>${id}</option>`).join('');
+      select.innerHTML = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
+        .map((id) => `<option value="${id}" ${id === current ? 'selected' : ''}>${id}</option>`).join('');
       if (status) status.textContent = '使用後備列表';
       return;
     }
-    select.innerHTML = models.map(m => {
-      const id = m.id;
-      return `<option value="${id}" ${id===current?'selected':''}>${id}</option>`;
-    }).join('');
-    if (!models.some(m => m.id === current)) {
-      select.value = defaultModel;
-    }
+    select.innerHTML = '';
+    models.forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.id;
+      if (m.id === current) opt.selected = true;
+      select.appendChild(opt);
+    });
+    if (!models.some((m) => m.id === current)) select.value = defaultModel;
     if (status) status.textContent = `已載入 ${models.length} 個模型`;
   } catch {
     if (status) status.textContent = '載入失敗，用後備列表';
   }
 }
 
-
 async function loadAggregatorModels(userKey, baseUrl, selectedId) {
   const status = document.getElementById('agg-models-status');
   const select = document.getElementById('or-model');
   if (!select) return;
-
   if (!userKey) {
     if (status) status.textContent = '請先填 Aggregator API Key，再重新整理列表';
     return;
   }
   if (status) status.textContent = '載入模型中…';
-
   try {
     const res = await fetch('/api/openai-compatible', {
       method: 'POST',
       headers: API_HEADERS,
-      body: JSON.stringify({
-        action: 'list-models',
-        userApiKey: userKey,
-        baseUrl: baseUrl || 'https://openrouter.ai/api/v1'
-      })
+      body: JSON.stringify({ action: 'list-models', userApiKey: userKey, baseUrl: baseUrl || 'https://openrouter.ai/api/v1' })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
-
     const models = data.models || [];
-    const vision = data.visionModels || models.filter(m => m.isVision);
+    const vision = data.visionModels || models.filter((m) => m.isVision);
     select.innerHTML = '';
-
     const addGroup = (label, list) => {
       if (!list.length) return;
       const og = document.createElement('optgroup');
       og.label = label;
-      list.forEach(m => {
+      list.forEach((m) => {
         const opt = document.createElement('option');
         opt.value = m.id;
         opt.textContent = m.isVision ? `👁 ${m.id}` : m.id;
@@ -290,23 +268,14 @@ async function loadAggregatorModels(userKey, baseUrl, selectedId) {
       });
       select.appendChild(og);
     };
-
     addGroup('Vision 模型（建議）', vision);
-    addGroup('其他模型', models.filter(m => !m.isVision));
-
-    if (selectedId && [...select.options].some(o => o.value === selectedId)) {
-      select.value = selectedId;
-    } else if (vision[0]) {
-      select.value = vision[0].id;
-    }
-
-    if (status) {
-      status.textContent = `已載入 ${models.length} 個模型（Vision ${vision.length}）`;
-    }
+    addGroup('其他模型', models.filter((m) => !m.isVision));
+    if (selectedId && [...select.options].some((o) => o.value === selectedId)) select.value = selectedId;
+    else if (vision[0]) select.value = vision[0].id;
+    if (status) status.textContent = `已載入 ${models.length} 個模型（Vision ${vision.length}）`;
   } catch (err) {
-    if (status) status.textContent = '載入失敗：' + err.message + '（仍可手動用而家選項）';
-    // keep existing option
-    if (selectedId && ![...select.options].some(o => o.value === selectedId)) {
+    if (status) status.textContent = '載入失敗：' + err.message;
+    if (selectedId && ![...select.options].some((o) => o.value === selectedId)) {
       const opt = document.createElement('option');
       opt.value = selectedId;
       opt.textContent = selectedId;

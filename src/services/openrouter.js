@@ -1,7 +1,3 @@
-/**
- * OpenAI-compatible aggregator client (OpenRouter, Together, etc.)
- */
-
 import { showToast } from '../ui/toast.js';
 import { runAnalyzeMultiple } from './analyze-multiple.js';
 import { API_HEADERS } from './api-headers.js';
@@ -20,9 +16,7 @@ function getConfig() {
     localStorage.getItem('aggregator_base_url') ||
     localStorage.getItem('openrouter_base_url') ||
     'https://openrouter.ai/api/v1';
-  if (!isAllowedAggregatorBase(baseUrl)) {
-    baseUrl = 'https://openrouter.ai/api/v1';
-  }
+  if (!isAllowedAggregatorBase(baseUrl)) baseUrl = 'https://openrouter.ai/api/v1';
   return { userApiKey, model, baseUrl };
 }
 
@@ -40,7 +34,7 @@ async function fetchCompat(body, { retries = 2 } = {}) {
     if ((res.status === 429 || /rate|quota/i.test(msg)) && i < retries) {
       const wait = 1500 * Math.pow(2, i);
       showToast(`Aggregator 繁忙，${Math.round(wait / 1000)}s 後重試…`, 'warning');
-      await new Promise(r => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, wait));
       lastErr = new Error(msg);
       continue;
     }
@@ -57,15 +51,15 @@ export async function analyzeReceiptOpenRouter(imageBase64) {
 
 export async function generateSummaryOpenRouter(expenses) {
   const cfg = getConfig();
-  const data = await fetchCompat({ action: 'generate-summary', expenses, ...cfg });
+  const slim = (expenses || []).map((e) => ({
+    date: e.date, vendor: e.vendor, category: e.category, amount: e.amount, notes: e.notes
+  }));
+  const data = await fetchCompat({ action: 'generate-summary', expenses: slim, ...cfg });
   return data.data;
 }
 
-/** @deprecated prefer providers.aggregator.analyzeMultiple */
 export async function analyzeMultipleOpenRouter(images, onProgress) {
-  return runAnalyzeMultiple(
-    images,
-    (img) => analyzeReceiptOpenRouter(img),
-    { onProgress, label: 'Aggregator', gapMs: 800 }
-  );
+  return runAnalyzeMultiple(images, (img) => analyzeReceiptOpenRouter(img), {
+    onProgress, label: 'Aggregator', gapMs: 800
+  });
 }

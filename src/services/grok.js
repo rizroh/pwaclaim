@@ -1,7 +1,3 @@
-/**
- * Grok (xAI) Vision — single image + thin multi wrapper
- */
-
 import { showToast } from '../ui/toast.js';
 import { runAnalyzeMultiple } from './analyze-multiple.js';
 import { API_HEADERS } from './api-headers.js';
@@ -21,7 +17,7 @@ async function fetchGrokWithRetry(imageBase64, model, userApiKey, retries = 3) {
     if (is429 && attempt < retries) {
       const wait = 2000 * Math.pow(2, attempt);
       showToast('Grok 額度繁忙，' + Math.round(wait / 1000) + ' 秒後重試…', 'warning');
-      await new Promise(r => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, wait));
       lastErr = new Error(msg);
       continue;
     }
@@ -35,12 +31,9 @@ export async function analyzeReceiptWithGrok(imageBase64, model = 'grok-2-vision
   return fetchGrokWithRetry(imageBase64, model, userApiKey);
 }
 
-/** @deprecated prefer providers.grok.analyzeMultiple */
 export async function analyzeMultipleWithGrok(images, onProgress) {
   const model = localStorage.getItem('grok_vision_model') || 'grok-2-vision-latest';
-  return runAnalyzeMultiple(
-    images,
-    (img) => analyzeReceiptWithGrok(img, model),
-    { onProgress, label: 'Grok', gapMs: 800 }
-  );
+  return runAnalyzeMultiple(images, (img) => analyzeReceiptWithGrok(img, model), {
+    onProgress, label: 'Grok', gapMs: 800
+  });
 }

@@ -1,90 +1,51 @@
-/**
- * Shared multi-image receipt analysis runner
- */
+export async function runAnalyzeMultiple(images, analyzeOne, { onProgress, label = 'AI', gapMs = 800 } = {}) {
+  const list = Array.isArray(images) ? images : [];
+  if (!list.length) throw new Error('沒有圖片');
 
-import { showToast } from '../ui/toast.js';
-
-/**
- * @param {string[]} images
- * @param {(imageBase64: string, index: number) => Promise<object>} analyzeOne
- * @param {{ onProgress?: Function, label?: string, gapMs?: number }} opts
- */
-export async function runAnalyzeMultiple(images, analyzeOne, opts = {}) {
-  const { onProgress, label = '分析', gapMs = 800 } = opts;
-  const total = images.length;
-  let totalAmount = 0;
-  const vendors = [];
-  const categories = [];
-  const notesList = [];
-  let latestDate = '';
-  const successIndices = [];
-  const failIndices = [];
-  const errorMessages = [];
-  const statuses = images.map((_, i) => ({ index: i, state: 'pending' }));
-
-  const emit = (i, state, message) => {
-    statuses[i] = { index: i, state, message };
-    if (onProgress) onProgress(i + 1, total, { statuses: [...statuses], current: i });
+  const statuses = list.map((_, index) => ({ index, state: 'pending' }));
+  const notify = (cur) => {
+    if (onProgress) onProgress(cur, list.length, { statuses: statuses.map((s) => ({ ...s })) });
   };
 
-  for (let i = 0; i < total; i++) {
-    emit(i, 'running');
-    showToast(`${label} ${i + 1}/${total}…`, 'info');
+  const results = [];
+  const successIndices = [];
+  let failCount = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    statuses[i].state = 'running';
+    notify(i + 1);
     try {
-      const parsed = await analyzeOne(images[i], i);
-      const data = typeof parsed === 'string' ? JSON.parse(parsed) : parsed;
-      const amt = parseFloat(data.amount);
-      if (!isNaN(amt) && amt > 0) totalAmount += amt;
-      if (data.vendor) vendors.push(data.vendor);
-      if (data.category) categories.push(data.category);
-      if (data.notes) notesList.push(data.notes);
-      if (data.date && (!latestDate || data.date > latestDate)) latestDate = data.date;
-
-      if ((data.vendor && data.vendor !== '未知商戶') || (!isNaN(amt) && amt > 0) || data.date) {
-        successIndices.push(i);
-        emit(i, 'ok', data.vendor || 'OK');
-      } else {
-        failIndices.push(i);
-        errorMessages.push(`第${i + 1}張: 資料不完整`);
-        emit(i, 'fail', '資料不完整');
-      }
+      const data = await analyzeOne(list[i]);
+      statuses[i].state = 'ok';
+      results.push(data || {});
+      successIndices.push(i);
     } catch (err) {
-      failIndices.push(i);
-      errorMessages.push(`第${i + 1}張: ${err.message}`);
-      emit(i, 'fail', err.message);
+      statuses[i].state = 'fail';
+      statuses[i].message = err.message || String(err);
+      failCount += 1;
     }
-    if (i < total - 1) await new Promise(r => setTimeout(r, gapMs));
+    notify(i + 1);
+    if (i < list.length - 1 && gapMs) await new Promise((r) => setTimeout(r, gapMs));
   }
 
-  if (!successIndices.length) {
-    throw new Error(errorMessages.slice(0, 3).join(' | ') || '分析失敗');
+  if (!results.length) {
+    throw new Error(label + ' 全部失敗：' + (statuses[0]?.message || ''));
   }
 
-  let topCategory = 'Other';
-  if (categories.length) {
-    const freq = {};
-    categories.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
-    topCategory = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
-  }
-  const uniqueVendors = [...new Set(vendors)];
-  const vendor = uniqueVendors.length === 1
-    ? uniqueVendors[0]
-    : uniqueVendors.join(' + ');
-  let notes = notesList.join(' | ');
-  if (!notes && successIndices.length > 1) {
-    notes = `共 ${successIndices.length} 張收據（${label}）`;
-  }
+  const amounts = results.map((r) => Number(r.amount)).filter((n) => Number.isFinite(n) && n > 0);
+  const amount = amounts.length ? amounts.reduce((a, b) => a + b, 0) : 0;
+  const first = results[0] || {};
+  const notes = results.map((r, i) => r.notes ? `#${i + 1} ${r.notes}` : '').filter(Boolean).join('\n');
 
   return {
-    amount: totalAmount,
-    date: latestDate || new Date().toISOString().slice(0, 10),
-    vendor,
-    category: topCategory,
+    date: first.date || '',
+    amount,
+    vendor: first.vendor || '',
+    category: first.category || 'Other',
     notes,
+    successCount: results.length,
+    failCount,
     successIndices,
-    failIndices,
-    successCount: successIndices.length,
-    failCount: failIndices.length,
-    statuses
+    results
   };
 }

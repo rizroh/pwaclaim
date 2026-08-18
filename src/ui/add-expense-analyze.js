@@ -1,7 +1,3 @@
-/**
- * OCR + provider analyze actions
- */
-
 import { state } from '../state.js';
 import { showToast } from './toast.js';
 import { performLocalOCR } from '../services/ocr.js';
@@ -29,7 +25,7 @@ function renderProgress(meta) {
   if (!progressEl || !meta?.statuses) return;
   progressEl.classList.remove('hidden');
   progressEl.innerHTML = '';
-  meta.statuses.forEach(s => {
+  meta.statuses.forEach((s) => {
     const row = document.createElement('div');
     const icon = s.state === 'ok' ? '✅' : s.state === 'fail' ? '❌' : s.state === 'running' ? '🔄' : '⏳';
     const label = s.state === 'ok' ? '成功' : s.state === 'fail'
@@ -49,8 +45,7 @@ export async function runOCR() {
   const original = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = '🤖 OCR 中…'; }
   try {
-    const parsed = await performLocalOCR(state.currentImages[0]);
-    fillForm(parsed);
+    fillForm(await performLocalOCR(state.currentImages[0]));
     showToast('OCR 完成（已填入表格）', 'success');
   } catch (err) {
     showToast('OCR 失敗：' + err.message, 'error');
@@ -63,28 +58,23 @@ export async function runProvider(providerId) {
   if (!state.currentImages.length) return;
   const provider = getProvider(providerId);
   if (!provider) return;
-
   if (provider.requiresUserKey) {
-    const key = localStorage.getItem(provider.keyStorageKey) ||
-      localStorage.getItem('user_openrouter_api_key');
+    const key = localStorage.getItem(provider.keyStorageKey) || localStorage.getItem('user_openrouter_api_key');
     if (!key) {
       showToast('請先到設定填寫 Aggregator API Key', 'warning', 4000);
       return;
     }
   }
-
   const btn = document.querySelector(`[data-provider="${providerId}"]`);
   const original = btn?.innerHTML;
   if (btn) btn.disabled = true;
-
   try {
     const result = await provider.analyzeMultiple(state.currentImages, (cur, total, meta) => {
       if (btn) btn.textContent = `${provider.emoji} ${cur}/${total}…`;
       renderProgress(meta);
     });
-
     if (result.failCount > 0) {
-      state.currentImages = result.successIndices.map(i => state.currentImages[i]);
+      state.currentImages = result.successIndices.map((i) => state.currentImages[i]);
       renderPreviews();
     }
     fillForm(result);
@@ -105,7 +95,7 @@ export function providerButtonsHtml() {
   const ocr = `<button type="button" data-analyze-btn data-provider="ocr" class="w-full hidden items-center justify-center gap-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition text-white py-3 rounded-2xl disabled:opacity-60">
           🤖 本地 OCR 掃描
         </button>`;
-  const providers = listProviders().map(p =>
+  const providers = listProviders().map((p) =>
     `<button type="button" data-analyze-btn data-provider="${p.id}" class="w-full hidden items-center justify-center gap-2 text-sm font-medium ${p.btnClass} active:scale-[0.98] transition text-white py-3 rounded-2xl disabled:opacity-60">
           ${p.emoji} ${p.label}
         </button>`
@@ -115,7 +105,7 @@ export function providerButtonsHtml() {
 
 export function bindAnalyzeButtons() {
   document.querySelector('[data-provider="ocr"]')?.addEventListener('click', runOCR);
-  listProviders().forEach(p => {
+  listProviders().forEach((p) => {
     document.querySelector(`[data-provider="${p.id}"]`)?.addEventListener('click', () => runProvider(p.id));
   });
 }

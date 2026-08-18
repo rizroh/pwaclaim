@@ -1,8 +1,3 @@
-/**
- * Load Noto Sans TC TTF into jsPDF (real font)
- * Cached in IndexedDB after first download
- */
-
 import { get, set } from 'idb-keyval';
 
 const FONT_CACHE_KEY = 'pdf_font_noto_sans_tc_b64_v1';
@@ -24,10 +19,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 export async function ensureChineseFont(doc) {
-  if (!cachedBase64) {
-    cachedBase64 = await get(FONT_CACHE_KEY);
-  }
-
+  if (!cachedBase64) cachedBase64 = await get(FONT_CACHE_KEY);
   if (!cachedBase64) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20000);
@@ -38,16 +30,9 @@ export async function ensureChineseFont(doc) {
       clearTimeout(timer);
     }
     if (!res.ok) throw new Error('無法下載中文字型（HTTP ' + res.status + '）');
-    const buf = await res.arrayBuffer();
-    cachedBase64 = arrayBufferToBase64(buf);
-    try {
-      await set(FONT_CACHE_KEY, cachedBase64);
-    } catch (e) {
-      console.warn('Font cache failed', e);
-    }
+    cachedBase64 = arrayBufferToBase64(await res.arrayBuffer());
+    try { await set(FONT_CACHE_KEY, cachedBase64); } catch (e) { console.warn('Font cache failed', e); }
   }
-
-  // Register on this doc instance (must do for each jsPDF document)
   doc.addFileToVFS(FONT_FILE, cachedBase64);
   doc.addFont(FONT_FILE, FONT_NAME, 'normal');
   doc.setFont(FONT_NAME, 'normal');

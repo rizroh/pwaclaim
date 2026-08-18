@@ -1,15 +1,8 @@
-// Vercel: /api/openai-compatible
-// OpenRouter / Together / Fireworks / any OpenAI-compatible chat+vision
-
 import { applyCors, rejectCors, requireClient } from '../lib/cors.js';
 import { rateLimit, clientKey } from '../lib/rate-limit.js';
 import { isAllowedAggregatorBase, normalizeAggregatorBase } from '../lib/aggregator-allowlist.js';
 
-export const config = {
-  api: {
-    bodyParser: { sizeLimit: '6mb' }
-  }
-};
+export const config = { api: { bodyParser: { sizeLimit: '6mb' } } };
 
 const DEFAULT_BASE = 'https://openrouter.ai/api/v1';
 
@@ -53,7 +46,7 @@ export default async function handler(req, res) {
       });
     }
 
-    let base = normalizeAggregatorBase(
+    const base = normalizeAggregatorBase(
       (requestedBase && String(requestedBase).trim()) || process.env.LLM_BASE_URL || DEFAULT_BASE
     );
     if (!isAllowedAggregatorBase(base)) {
@@ -72,7 +65,7 @@ export default async function handler(req, res) {
       if (base.includes('openrouter.ai')) {
         const origin = req.headers.origin || ('https://' + (req.headers.host || 'localhost'));
         headers['HTTP-Referer'] = origin;
-        headers['X-Title'] = 'Expense Claim PWA';
+        headers['X-Title'] = 'PWACLAIM';
       }
 
       const resp = await fetch(base + '/models', { method: 'GET', headers });
@@ -98,16 +91,10 @@ export default async function handler(req, res) {
           (Array.isArray(inputs) && inputs.some((x) => /image|vision/i.test(String(x)))) ||
           /vision|gpt-4o|gemini|claude-3|llava|pixtral|qwen.*(vl|vision)|llama.*vision|ocr/i.test(idl) ||
           /vision|image/i.test(desc);
-        return {
-          id,
-          name: name !== id ? name : id,
-          isVision: !!isVision
-        };
+        return { id, name: name !== id ? name : id, isVision: !!isVision };
       }).filter((m) => m.id);
 
-      // Prefer vision models first; still return others so user can pick
       models.sort((a, b) => Number(b.isVision) - Number(a.isVision) || a.id.localeCompare(b.id));
-
       return res.status(200).json({
         success: true,
         models,
@@ -119,9 +106,7 @@ export default async function handler(req, res) {
     if (action === 'analyze-receipt') {
       if (!imageBase64) return res.status(400).json({ error: '缺少 imageBase64' });
       const raw = String(imageBase64);
-      if (raw.length > 5_500_000) {
-        return res.status(400).json({ error: '圖片太大，請壓縮後再試' });
-      }
+      if (raw.length > 5_500_000) return res.status(400).json({ error: '圖片太大，請壓縮後再試' });
       const imageUrl = raw.startsWith('data:') ? raw : 'data:image/jpeg;base64,' + raw;
 
       const prompt = `你是一位香港會計專家。請仔細分析這張收據圖片，並只回傳以下 JSON 格式（不要有其他文字、不要 markdown）：
@@ -139,15 +124,13 @@ export default async function handler(req, res) {
 
       const payload = {
         model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageUrl } }
-            ]
-          }
-        ],
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }],
         temperature: 0.1
       };
 
@@ -163,25 +146,19 @@ export default async function handler(req, res) {
     if (action === 'generate-summary') {
       const list = Array.isArray(expenses) ? expenses : [];
       const lines = list.slice(0, 80).map((e, i) =>
-        `${i + 1}. ${e.date || ''} | ${e.vendor || ''} | ${e.category || ''} | HK$${Number(e.amount || 0).toFixed(2)} | ${(e.notes || '').slice(0, 40)}`
+        `${i + 1}. ${e.date || ''} | ${e.vendor || ''} | ${e.category || ''} | HK$${Number(e.amount || 0).toFixed(2)} | ${String(e.notes || '').slice(0, 40)}`
       ).join('\n');
 
       const prompt = `你是香港財務助理。根據以下開支記錄，用繁體中文寫一份簡潔月結報告（條列重點、總額、類別分佈、異常／注意事項）。不要輸出 JSON。\n\n${lines || '（無記錄）'}`;
-
-      const payload = {
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3
-      };
+      const payload = { model, messages: [{ role: 'user', content: prompt }], temperature: 0.3 };
       const data = await callChat(base, apiKey, payload, req);
-      const content = extractContent(data);
-      return res.status(200).json({ success: true, data: content, modelUsed: model, provider: base });
+      return res.status(200).json({ success: true, data: extractContent(data), modelUsed: model, provider: base });
     }
 
     return res.status(400).json({ error: '未知 action' });
   } catch (err) {
     console.error('openai-compatible error:', err);
-    return res.status(500).json({ error: err.message || String(err) });
+    return res.status(err.status || 500).json({ error: err.message || String(err) });
   }
 }
 
@@ -190,13 +167,11 @@ async function callChat(base, apiKey, payload, req) {
     'Content-Type': 'application/json',
     Authorization: 'Bearer ' + apiKey
   };
-  // OpenRouter optional rankings headers
   if (base.includes('openrouter.ai')) {
     const origin = req.headers.origin || ('https://' + (req.headers.host || 'localhost'));
     headers['HTTP-Referer'] = origin;
-    headers['X-Title'] = 'Expense Claim PWA';
+    headers['X-Title'] = 'PWACLAIM';
   }
-
   const response = await fetch(base + '/chat/completions', {
     method: 'POST',
     headers,
@@ -215,9 +190,7 @@ async function callChat(base, apiKey, payload, req) {
 function extractContent(data) {
   const c = data.choices?.[0]?.message?.content;
   if (typeof c === 'string') return c;
-  if (Array.isArray(c)) {
-    return c.map(p => (typeof p === 'string' ? p : p.text || '')).join('');
-  }
+  if (Array.isArray(c)) return c.map((p) => (typeof p === 'string' ? p : p.text || '')).join('');
   return '';
 }
 

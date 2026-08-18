@@ -1,7 +1,3 @@
-/**
- * Expense Claim PWA - Entry Point
- */
-
 import './styles.css';
 import { initApp } from './app.js';
 import { initStorage } from './services/storage.js';

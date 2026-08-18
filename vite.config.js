@@ -5,11 +5,11 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ['icons/*.png'],
       manifest: {
-        name: '開支索償 PWA - Secure & Smart',
-        short_name: 'SecureExpenses',
-        description: 'Mobile-first secure PWA for expense claims with AI receipt analysis',
+        name: '開支索償 PWA - PWACLAIM',
+        short_name: 'PWACLAIM',
+        description: 'Mobile-first PWA for expense claims with AI receipt analysis',
         theme_color: '#1e40af',
         background_color: '#f8fafc',
         display: 'standalone',
@@ -17,22 +17,9 @@ export default defineConfig({
         lang: 'zh-HK',
         start_url: '/',
         icons: [
-          {
-            src: '/icons/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: '/icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable'
-          }
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       },
       workbox: {
@@ -43,17 +30,20 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'cdn-cache',
-              expiration: {
-                maxEntries: 20,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-              }
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 }
             }
           }
         ]
       }
     })
   ],
-  server: {
-    port: 5173
-  }
+  server: { port: 5173 }
 });

@@ -1,7 +1,3 @@
-/**
- * Camera / upload / preview helpers for add-expense
- */
-
 import { state } from '../state.js';
 import { showToast } from './toast.js';
 import { compressImage } from '../utils.js';
@@ -12,7 +8,7 @@ let useFront = false;
 
 export function stopCamera() {
   if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream.getTracks().forEach((t) => t.stop());
     cameraStream = null;
   }
   const modal = document.getElementById('camera-modal');
@@ -66,8 +62,7 @@ export async function capturePhoto() {
   }
   const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
   try {
-    const compressed = await compressImage(dataUrl);
-    state.currentImages.push(compressed);
+    state.currentImages.push(await compressImage(dataUrl));
     renderPreviews();
     showToast('已影相', 'success');
   } catch (e) {
@@ -87,8 +82,7 @@ export async function handleFiles(e) {
     if (!file.type.startsWith('image/')) continue;
     try {
       const dataUrl = await readFile(file);
-      const compressed = await compressImage(dataUrl);
-      state.currentImages.push(compressed);
+      state.currentImages.push(await compressImage(dataUrl));
     } catch (err) {
       showToast('讀取失敗：' + err.message, 'error');
     }
@@ -130,7 +124,7 @@ export function renderPreviews() {
     el.appendChild(wrap);
   });
   const has = state.currentImages.length > 0;
-  document.querySelectorAll('[data-analyze-btn]').forEach(b => {
+  document.querySelectorAll('[data-analyze-btn]').forEach((b) => {
     b.classList.toggle('hidden', !has);
     b.classList.toggle('flex', has);
   });
