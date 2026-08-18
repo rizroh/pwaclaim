@@ -1,5 +1,6 @@
 /**
  * Main Application Controller
+ * Shell renders once; views update independently.
  */
 
 import { state, subscribe, setState } from './state.js';
@@ -11,34 +12,50 @@ import { loadExpenses } from './services/storage.js';
 
 let currentView = 'dashboard';
 let pdfObjectUrl = null;
+let shellReady = false;
 
 export async function initApp() {
   const expenses = await loadExpenses();
   state.expenses = expenses;
   state.online = navigator.onLine;
 
-  renderApp();
-  subscribe(() => renderApp());
+  renderShell();
+  switchView('dashboard');
+
+  // Only update offline banner — NEVER full shell re-render (kills modals/forms)
+  subscribe(() => {
+    updateOfflineBanner();
+  });
+
   setupInstallPrompt();
   setupOnlineListeners();
-
   window.showPdfPreview = showPdfPreview;
 }
 
 function setupOnlineListeners() {
   window.addEventListener('online', () => {
-    setState({ online: true });
+    state.online = true;
+    updateOfflineBanner();
     showToast('已恢復網絡', 'success');
   });
   window.addEventListener('offline', () => {
-    setState({ online: false });
+    state.online = false;
+    updateOfflineBanner();
   });
 }
 
-function renderApp() {
-  const app = document.getElementById('app');
-  const offline = state.online === false;
+function updateOfflineBanner() {
+  const bar = document.getElementById('offline-banner');
+  if (!bar) return;
+  if (state.online === false) {
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+}
 
+function renderShell() {
+  const app = document.getElementById('app');
   app.innerHTML = `
     <header class="bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50">
       <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
@@ -49,12 +66,11 @@ function renderApp() {
             <p class="text-[10px] text-slate-500 -mt-0.5">Secure & Smart</p>
           </div>
         </div>
-        <button id="install-btn" class="hidden items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-full">📲 安裝</button>
+        <button id="install-btn" type="button" class="hidden items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-full">📲 安裝</button>
       </div>
-      ${offline ? `
-      <div class="bg-amber-500 text-white text-center text-xs font-medium py-1.5">
+      <div id="offline-banner" class="${state.online === false ? '' : 'hidden'} bg-amber-500 text-white text-center text-xs font-medium py-1.5">
         📡 離線模式：可睇已存記錄，AI／上傳需連網
-      </div>` : ''}
+      </div>
     </header>
 
     <main id="main-content" class="max-w-lg mx-auto px-4 pt-4 pb-28 min-h-[calc(100vh-100px)]"></main>
@@ -62,16 +78,16 @@ function renderApp() {
     <nav class="fixed bottom-0 left-0 right-0 z-50 safe-bottom">
       <div class="max-w-lg mx-auto bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
         <div class="grid grid-cols-4 h-16">
-          <button data-view="dashboard" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-primary-800">
+          <button type="button" data-view="dashboard" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-primary-800">
             <span class="text-xl">🏠</span><span class="text-[10px] font-medium">主頁</span>
           </button>
-          <button data-view="add" class="nav-btn relative flex flex-col items-center justify-center -mt-5">
+          <button type="button" data-view="add" class="nav-btn relative flex flex-col items-center justify-center -mt-5">
             <div class="w-14 h-14 bg-primary-800 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-primary-800/30">＋</div>
           </button>
-          <button data-view="pdf" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-slate-500">
+          <button type="button" data-view="pdf" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-slate-500">
             <span class="text-xl">📄</span><span class="text-[10px] font-medium">PDF</span>
           </button>
-          <button data-view="settings" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-slate-500">
+          <button type="button" data-view="settings" class="nav-btn flex flex-col items-center justify-center gap-0.5 text-slate-500">
             <span class="text-xl">⚙️</span><span class="text-[10px] font-medium">設定</span>
           </button>
         </div>
@@ -81,20 +97,20 @@ function renderApp() {
     <div id="toast-root" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none"></div>
 
     <div id="report-modal" class="fixed inset-0 z-[200] hidden items-end sm:items-center justify-center bg-black/40 p-4">
-      <div class="bg-white w-full max-w-lg max-h-[80vh] rounded-3xl shadow-xl flex flex-col overflow-hidden">
+      <div class="bg-white w-full max-w-lg max-h-[80vh] rounded-3xl shadow-xl flex flex-col overflow-hidden" role="dialog">
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 class="font-semibold text-base">✨ AI 月結報告</h3>
-          <button id="report-close" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">✕</button>
+          <button type="button" id="report-close" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">✕</button>
         </div>
         <div id="report-body" class="flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-700 whitespace-pre-wrap break-words"></div>
         <div class="px-5 py-3 border-t border-slate-100">
-          <button id="report-copy" class="w-full py-2.5 rounded-xl bg-primary-800 text-white text-sm font-medium">複製報告</button>
+          <button type="button" id="report-copy" class="w-full py-2.5 rounded-xl bg-primary-800 text-white text-sm font-medium">複製報告</button>
         </div>
       </div>
     </div>
 
     <div id="pdf-modal" class="fixed inset-0 z-[200] hidden items-end sm:items-center justify-center bg-black/50 p-3">
-      <div class="bg-white w-full max-w-lg max-h-[90vh] rounded-3xl shadow-xl flex flex-col overflow-hidden">
+      <div class="bg-white w-full max-w-lg max-h-[90vh] rounded-3xl shadow-xl flex flex-col overflow-hidden" role="dialog">
         <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h3 class="font-semibold text-sm">📄 PDF 已就緒</h3>
           <button type="button" id="pdf-close" class="w-8 h-8 rounded-full bg-slate-100">✕</button>
@@ -121,11 +137,15 @@ function renderApp() {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view;
       if (view === 'pdf') {
-        import('./services/pdf.js').then(m => m.generatePDF());
+        import('./services/pdf.js').then(m => m.generatePDF()).catch(err => {
+          showToast('PDF 失敗：' + err.message, 'error');
+        });
         return;
       }
-      if (view === 'add') {
-        // new expense unless already editing
+      if (view === 'add' && currentView !== 'add') {
+        // FAB = new expense (clear edit mode)
+        state.editingId = null;
+        state.currentImages = [];
       }
       switchView(view);
     });
@@ -141,46 +161,64 @@ function renderApp() {
     if (e.target.id === 'pdf-modal') closePdfModal();
   });
 
-  switchView(currentView);
+  shellReady = true;
 }
 
 export function switchView(view) {
   currentView = view;
   const main = document.getElementById('main-content');
   if (!main) return;
+
   document.querySelectorAll('.nav-btn').forEach(btn => {
     const isActive = btn.dataset.view === view;
     btn.classList.toggle('text-primary-800', isActive);
     btn.classList.toggle('text-slate-500', !isActive);
   });
+
   switch (view) {
-    case 'dashboard': renderDashboard(main); break;
-    case 'add': renderAddExpense(main); break;
-    case 'settings': renderSettings(main); break;
-    default: renderDashboard(main);
+    case 'dashboard':
+      renderDashboard(main);
+      break;
+    case 'add':
+      renderAddExpense(main);
+      break;
+    case 'settings':
+      renderSettings(main);
+      break;
+    default:
+      renderDashboard(main);
   }
 }
 
 export function showReportModal(text) {
   const modal = document.getElementById('report-modal');
   const body = document.getElementById('report-body');
-  if (!modal || !body) { alert(text); return; }
+  if (!modal || !body) {
+    alert(text);
+    return;
+  }
   body.textContent = text || '（無內容）';
   modal.classList.remove('hidden');
   modal.classList.add('flex');
-  document.getElementById('report-copy').onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(text || '');
-      showToast('已複製', 'success');
-    } catch {
-      showToast('複製失敗', 'warning');
-    }
-  };
+  const copyBtn = document.getElementById('report-copy');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(text || '');
+        showToast('已複製', 'success');
+      } catch {
+        showToast('複製失敗', 'warning');
+      }
+    };
+  }
 }
 
 function closeReportModal() {
   const modal = document.getElementById('report-modal');
-  if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
 }
 
 function isMobileDevice() {
@@ -196,12 +234,11 @@ function showPdfPreview(url, fileName, blob) {
 
   const modal = document.getElementById('pdf-modal');
   if (!modal) {
-    // fallback: open or download
     try {
       const w = window.open(url, '_blank');
-      if (!w) triggerDownload(url, fileName);
+      if (!w) triggerDownload(url, fileName, blob);
     } catch (_) {
-      triggerDownload(url, fileName);
+      triggerDownload(url, fileName, blob);
     }
     return;
   }
@@ -212,7 +249,6 @@ function showPdfPreview(url, fileName, blob) {
   if (nameEl) nameEl.textContent = fileName || 'expense.pdf';
 
   const mobile = isMobileDevice();
-  // iOS/Android iframe 往往空白 → 預設用按鈕開啟系統閱讀器
   if (frame && !mobile) {
     frame.classList.remove('hidden');
     if (hint) hint.classList.add('hidden');
@@ -233,10 +269,8 @@ function showPdfPreview(url, fileName, blob) {
 
   if (openBtn) {
     openBtn.onclick = () => {
-      // 新分頁用 blob URL；iOS 會開系統 PDF viewer
       const w = window.open(url, '_blank');
       if (!w) {
-        // popup blocked → 用 <a target=_blank>
         const a = document.createElement('a');
         a.href = url;
         a.target = '_blank';
@@ -261,14 +295,16 @@ function triggerDownload(url, fileName, blob) {
   const a = document.createElement('a');
   a.href = url;
   a.download = fileName || 'expense.pdf';
-  // iOS Safari 有時忽略 download，仍盡量試
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // 再備一招：如果有 blob，用 msSave 或 share
-  if (blob && navigator.share && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    const file = new File([blob], fileName || 'expense.pdf', { type: 'application/pdf' });
-    navigator.share({ files: [file], title: fileName }).catch(() => {});
+  if (blob && navigator.canShare) {
+    try {
+      const file = new File([blob], fileName || 'expense.pdf', { type: 'application/pdf' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: fileName }).catch(() => {});
+      }
+    } catch (_) {}
   }
 }
 
