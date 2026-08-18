@@ -451,10 +451,11 @@ async function save() {
     return;
   }
 
-  const id = state.editingId || 'exp_' + Date.now();
+  const id = state.editingId || ('exp_' + Date.now());
+  const existing = state.editingId
+    ? state.expenses.find(e => e.id === state.editingId)
+    : null;
 
-  // Store compressed dataUrls directly in the expense (simple & PDF-friendly)
-  // Compression already applied, MAX=10 keeps size reasonable
   const expense = {
     id,
     date,
@@ -463,12 +464,14 @@ async function save() {
     category,
     notes,
     images: [...state.currentImages],
-    createdAt: new Date().toISOString()
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
   if (state.editingId) {
     const idx = state.expenses.findIndex(e => e.id === state.editingId);
     if (idx >= 0) state.expenses[idx] = expense;
+    else state.expenses.unshift(expense);
   } else {
     state.expenses.unshift(expense);
   }

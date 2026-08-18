@@ -1,5 +1,5 @@
 /**
- * Toast Notification System (improved)
+ * Toast — textContent only (no HTML injection)
  */
 
 export function showToast(message, type = 'success', duration = 2800) {
@@ -19,7 +19,9 @@ export function showToast(message, type = 'success', duration = 2800) {
     shadow-lg shadow-black/10 flex items-center gap-2
     animate-[slideUp_0.3s_ease_forwards] ${colors[type] || colors.info}
   `;
-  toast.innerHTML = `<span>${message}</span>`;
+  const span = document.createElement('span');
+  span.textContent = String(message ?? '');
+  toast.appendChild(span);
 
   root.appendChild(toast);
 
@@ -31,7 +33,6 @@ export function showToast(message, type = 'success', duration = 2800) {
   }, duration);
 }
 
-// Inject keyframe if needed
 if (!document.getElementById('toast-style')) {
   const style = document.createElement('style');
   style.id = 'toast-style';
