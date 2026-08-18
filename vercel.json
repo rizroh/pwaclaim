@@ -2,9 +2,23 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; worker-src 'self' blob:"
+        }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/api/auth/login", "destination": "/api/auth-login" },
-    { "source": "/api/auth/callback", "destination": "/api/auth-callback" },
     { "source": "/api/gemini", "destination": "/api/gemini" },
     { "source": "/api/grok-vision", "destination": "/api/grok-vision" },
     { "source": "/api/models", "destination": "/api/models" },
