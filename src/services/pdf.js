@@ -1,3 +1,5 @@
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 /**
  * PDF Generation – Noto Sans TC font for ALL pages (summary + receipt)
  */
@@ -29,31 +31,26 @@ function write(doc, text, x, y, opts, size) {
 export async function generatePDF() {
   const expenses = state.expenses || [];
   if (expenses.length === 0) {
-    showToast('未有開支可以生成 PDF', 'warning');
+    showToast('未有開支記錄 — 請先新增至少一筆再開 PDF', 'warning', 4500);
     return;
   }
 
-  if (!window.jspdf) {
-    showToast('jsPDF 尚未載入，請重新整理', 'error');
-    return;
-  }
-
-  showToast('正在載入中文字型並生成 PDF…', 'info');
+  showToast('正在準備 PDF（含中文字型）…', 'info', 5000);
 
   try {
-    const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
+    let fontOk = false;
     try {
       await ensureChineseFont(doc);
+      fontOk = true;
     } catch (fontErr) {
-      console.error(fontErr);
-      showToast('中文字型載入失敗：' + fontErr.message, 'error');
-      return;
+      console.warn('Chinese font failed, continue with default', fontErr);
+      showToast('中文字型載入失敗，將用基本字型繼續…', 'warning', 3000);
     }
 
     const settings = JSON.parse(localStorage.getItem('expense_settings') || '{}');

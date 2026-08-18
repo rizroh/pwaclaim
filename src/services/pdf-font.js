@@ -29,7 +29,14 @@ export async function ensureChineseFont(doc) {
   }
 
   if (!cachedBase64) {
-    const res = await fetch(FONT_URL);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    let res;
+    try {
+      res = await fetch(FONT_URL, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error('無法下載中文字型（HTTP ' + res.status + '）');
     const buf = await res.arrayBuffer();
     cachedBase64 = arrayBufferToBase64(buf);

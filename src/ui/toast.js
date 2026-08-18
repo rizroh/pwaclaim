@@ -1,5 +1,5 @@
 /**
- * Toast — textContent only (no HTML injection)
+ * Toast — textContent only, styles from styles.css / Tailwind
  */
 
 export function showToast(message, type = 'success', duration = 2800) {
@@ -17,12 +17,11 @@ export function showToast(message, type = 'success', duration = 2800) {
   toast.className = `
     pointer-events-auto px-4 py-2.5 rounded-2xl text-white text-sm font-medium
     shadow-lg shadow-black/10 flex items-center gap-2
-    animate-[slideUp_0.3s_ease_forwards] ${colors[type] || colors.info}
+    animate-slideUp ${colors[type] || colors.info}
   `;
   const span = document.createElement('span');
   span.textContent = String(message ?? '');
   toast.appendChild(span);
-
   root.appendChild(toast);
 
   setTimeout(() => {
@@ -31,16 +30,4 @@ export function showToast(message, type = 'success', duration = 2800) {
     toast.style.transition = 'all 0.25s ease';
     setTimeout(() => toast.remove(), 250);
   }, duration);
-}
-
-if (!document.getElementById('toast-style')) {
-  const style = document.createElement('style');
-  style.id = 'toast-style';
-  style.textContent = `
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  `;
-  document.head.appendChild(style);
 }

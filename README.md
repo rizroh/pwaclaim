@@ -1,28 +1,49 @@
-# 開支索償 PWA — Redesign (pwaclaim)
+# 開支索償 PWA — pwaclaim
 
-Mobile-first 開支索償 PWA：相機／上傳收據 → OCR / Gemini / Grok Vision 分析 → 儲存 → PDF 匯出。
+Mobile-first 開支索償：相機／上傳收據 → OCR / Gemini / Grok / **LLM Aggregator** → 儲存 → PDF 匯出。
 
-## 已完成
+## 功能
 
-- 模組化架構（Vite + vite-plugin-pwa）
-- 相機、多圖上傳 + 壓縮
+- Vite + vite-plugin-pwa（可安裝、離線殼）
+- 相機／多圖上傳 + 壓縮（最多 10 張）
 - 本地 Tesseract OCR（中英）
-- Gemini AI 多圖分析 + 月結報告（modal 顯示，避免中文亂碼）
-- Grok Vision（用 xAI API Key，已移除 OAuth 登入）
-- PDF 生成（中文支援）
-- 設定頁：Gemini / xAI API Key + 模型選擇
-- PWA 安裝按鈕 + placeholder icons
+- **Provider registry**：Gemini、Grok Vision、OpenAI-compatible Aggregator（OpenRouter 等）
+- 共用多圖分析合併邏輯（`analyze-multiple.js`）
+- IndexedDB 儲存 + 匯出／匯入
+- PDF（Noto Sans TC 字型）+ 手機預覽／下載
+- AI 月結報告
+- Security：CORS 同 host、CSP／安全 headers、toast XSS 防護、API 簡易 rate limit
 
-## 環境變數（Vercel）
+## 架構（重點）
 
 ```
-GEMINI_API_KEY=...
-XAI_API_KEY=xai-...
+src/services/providers.js     ← 加新 AI 主要改呢度
+src/services/analyze-multiple.js
+src/ui/add-expense.js         ← shell
+src/ui/add-expense-media.js   ← 相機／上傳
+src/ui/add-expense-analyze.js ← OCR + providers
+api/*                         ← Vercel serverless proxy
+lib/cors.js, lib/rate-limit.js
 ```
 
-（已不再需要 GROK_CLIENT_ID / GROK_CLIENT_SECRET）
+## 環境變數（Vercel，可選）
 
-## 本機開發
+```
+GEMINI_API_KEY=
+XAI_API_KEY=
+OPENROUTER_API_KEY=
+LLM_BASE_URL=https://openrouter.ai/api/v1
+```
+
+用戶亦可在 App **設定** 自填 Key（存 localStorage）。
+
+## 設定：LLM Aggregator
+
+1. API Key（例如 OpenRouter `sk-or-...`）
+2. Base URL：`https://openrouter.ai/api/v1`（或其他兼容端點）
+3. Model ID（需 **Vision**），例：`google/gemini-2.0-flash-001`
+
+## 本機
 
 ```bash
 npm install
@@ -31,17 +52,10 @@ npm run dev
 
 ## 部署
 
-Push 到 GitHub → Vercel 自動 build（Framework: Vite，Output: dist）
+Push GitHub → Vercel（Framework: Vite，Output: `dist`）
 
-## Offline / 安裝注意
+## 注意
 
-1. Icons：public/icons/icon-192.png、icon-512.png 而家係純色 placeholder，正式上線請換成真正 logo。
-2. HTTPS：PWA 安裝同 Service Worker 需要 HTTPS（Vercel 預設有）。
-3. 安裝：Chrome「加到主畫面」／Safari「分享 → 加入主畫面」。Header 有「📲 安裝」按鈕。
-4. Offline：vite-plugin-pwa 會 cache 靜態資源；API 呼叫（Gemini/Grok）離線時會失敗屬正常。本地已儲存嘅開支可離線睇。
-
-## 模型列表（已清理）
-
-Gemini：gemini-2.5-flash（預設）、gemini-2.5-flash-lite、gemini-2.0-flash、gemini-1.5-flash、gemini-1.5-flash-8b
-
-Grok Vision：grok-2-vision-latest（預設）、grok-2-vision、grok-4.5
+- Icons 仍為 placeholder，正式上線請換 logo
+- PWA 需 HTTPS
+- Rate limit 係 per-instance 記憶體限制，唔係全網全局

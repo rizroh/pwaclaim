@@ -1,7 +1,8 @@
 /**
- * Local Tesseract OCR Service
+ * Local Tesseract OCR (npm import — no CDN script)
  */
 
+import { createWorker } from 'tesseract.js';
 import { parseReceiptText } from '../utils.js';
 import { showToast } from '../ui/toast.js';
 
@@ -12,17 +13,11 @@ export async function performLocalOCR(imageDataUrl) {
 
   showToast('本地 AI 正在掃描收據，首次使用需下載語言模型...', 'info');
 
-  if (!window.Tesseract) {
-    throw new Error('Tesseract 尚未載入，請重新整理頁面');
-  }
-
   if (!tesseractWorker) {
-    tesseractWorker = await window.Tesseract.createWorker('chi_tra+eng');
+    tesseractWorker = await createWorker('chi_tra+eng');
   }
 
   const { data } = await tesseractWorker.recognize(imageDataUrl);
-  console.log('Tesseract OCR Output:', data.text);
-
   return parseReceiptText(data.text);
 }
 

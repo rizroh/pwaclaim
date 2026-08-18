@@ -2,6 +2,7 @@
 // API Key only (user key or XAI_API_KEY) — OAuth removed
 
 import { applyCors, rejectCors } from '../lib/cors.js';
+import { rateLimit, clientKey } from '../lib/rate-limit.js';
 
 export const config = {
   api: {
@@ -13,6 +14,12 @@ export const config = {
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) return rejectCors(res);
+
+  const rl = rateLimit('api:' + clientKey(req), { limit: 40, windowMs: 60_000 });
+  if (!rl.ok) {
+    res.setHeader('Retry-After', String(rl.retryAfterSec || 60));
+    return res.status(429).json({ error: '請求過於頻密，請稍後再試', retryAfterSec: rl.retryAfterSec });
+  }
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

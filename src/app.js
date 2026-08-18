@@ -137,9 +137,13 @@ function renderShell() {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view;
       if (view === 'pdf') {
-        import('./services/pdf.js').then(m => m.generatePDF()).catch(err => {
-          showToast('PDF 失敗：' + err.message, 'error');
-        });
+        showToast('準備產生 PDF…', 'info', 1500);
+        import('./services/pdf.js')
+          .then(m => m.generatePDF())
+          .catch(err => {
+            console.error(err);
+            showToast('PDF 失敗：' + (err && err.message ? err.message : String(err)), 'error', 4000);
+          });
         return;
       }
       if (view === 'add' && currentView !== 'add') {

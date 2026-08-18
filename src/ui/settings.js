@@ -5,12 +5,20 @@
 import { showToast } from './toast.js';
 import { exportAllData, importAllData, clearAllData, loadExpenses } from '../services/storage.js';
 import { state, setState } from '../state.js';
+import { AGGREGATOR_PRESETS, listAggregatorPresets, getAggregatorPreset, matchPresetByBaseUrl } from '../services/aggregator-presets.js';
 
 export function renderSettings(container) {
   const geminiKey = localStorage.getItem('user_gemini_api_key') || '';
   const xaiKey = localStorage.getItem('user_xai_api_key') || '';
   const geminiModel = localStorage.getItem('gemini_model') || 'gemini-3.5-flash-lite';
   const grokModel = localStorage.getItem('grok_vision_model') || 'grok-2-vision-latest';
+  const orKey = localStorage.getItem('user_aggregator_api_key') || localStorage.getItem('user_openrouter_api_key') || '';
+  const orModel = localStorage.getItem('aggregator_model') || localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
+  const orBase = localStorage.getItem('aggregator_base_url') || localStorage.getItem('openrouter_base_url') || 'https://openrouter.ai/api/v1';
+  const orPreset = localStorage.getItem('aggregator_preset') || matchPresetByBaseUrl(orBase);
+  const presetOpts = listAggregatorPresets().map(p =>
+    `<option value="${p.id}" ${p.id === orPreset ? 'selected' : ''}>${p.label}</option>`
+  ).join('');
 
   container.innerHTML = `
     <h2 class="font-semibold text-lg mb-5">設定</h2>
@@ -42,6 +50,34 @@ export function renderSettings(container) {
         </select>
       </div>
 
+      <!-- LLM Aggregator -->
+      <div class="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm">
+        <label class="block text-sm font-medium mb-1">LLM Aggregator</label>
+        <p class="text-xs text-slate-500 mb-3">OpenRouter / Together / Fireworks 或自訂 OpenAI-compatible 端點。分析收據請揀 <b>Vision</b> 模型。</p>
+
+        <label class="block text-xs font-medium text-slate-500 mb-1.5">供應商 Preset</label>
+        <select id="or-preset" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none mb-3">
+          ${presetOpts}
+        </select>
+
+        <label class="block text-xs font-medium text-slate-500 mb-1.5">API Key</label>
+        <input id="or-key" type="password" value="${orKey}" placeholder="API Key"
+          class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
+
+        <label class="block text-xs font-medium text-slate-500 mb-1.5">Base URL</label>
+        <input id="or-base" type="url" value="${orBase}" placeholder="https://openrouter.ai/api/v1"
+          class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition mb-3">
+
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="block text-xs font-medium text-slate-500">模型（動態列表）</label>
+          <button type="button" id="btn-refresh-agg-models" class="text-[11px] text-primary-700 font-medium">重新整理列表</button>
+        </div>
+        <select id="or-model" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none mb-1">
+          <option value="${orModel}">${orModel}</option>
+        </select>
+        <p id="agg-models-status" class="text-[10px] text-slate-400 mt-1">填 Key 後撳「重新整理」載入模型；Vision 模型會排前面。</p>
+      </div>
+
       <button id="btn-save-key" class="w-full bg-primary-800 text-white py-3 rounded-2xl text-sm font-medium">儲存設定</button>
 
       <!-- Export / Import -->
@@ -67,9 +103,43 @@ export function renderSettings(container) {
   `;
 
   loadGeminiModels(geminiKey, geminiModel);
+  loadAggregatorModels(orKey, orBase, orModel);
 
   document.getElementById('btn-refresh-models')?.addEventListener('click', () => {
     loadGeminiModels(document.getElementById('gemini-key')?.value.trim() || '', document.getElementById('gemini-model')?.value);
+  });
+
+  document.getElementById('or-preset')?.addEventListener('change', () => {
+    const id = document.getElementById('or-preset').value;
+    const preset = getAggregatorPreset(id);
+    const baseEl = document.getElementById('or-base');
+    const keyEl = document.getElementById('or-key');
+    if (baseEl && preset.baseUrl) baseEl.value = preset.baseUrl;
+    if (baseEl && id === 'custom' && !baseEl.value) baseEl.readOnly = false;
+    if (baseEl) baseEl.readOnly = id !== 'custom';
+    if (keyEl && preset.keyPlaceholder) keyEl.placeholder = preset.keyPlaceholder;
+    if (preset.defaultModel) {
+      const sel = document.getElementById('or-model');
+      if (sel && ![...sel.options].some(o => o.value === preset.defaultModel)) {
+        const opt = document.createElement('option');
+        opt.value = preset.defaultModel;
+        opt.textContent = preset.defaultModel + ' (default)';
+        sel.insertBefore(opt, sel.firstChild);
+        sel.value = preset.defaultModel;
+      } else if (sel) sel.value = preset.defaultModel;
+    }
+  });
+  // lock base url for non-custom
+  const initPreset = document.getElementById('or-preset')?.value || 'openrouter';
+  const baseEl0 = document.getElementById('or-base');
+  if (baseEl0) baseEl0.readOnly = initPreset !== 'custom';
+
+  document.getElementById('btn-refresh-agg-models')?.addEventListener('click', () => {
+    loadAggregatorModels(
+      document.getElementById('or-key')?.value.trim() || '',
+      document.getElementById('or-base')?.value.trim() || '',
+      document.getElementById('or-model')?.value
+    );
   });
 
   document.getElementById('btn-save-key')?.addEventListener('click', () => {
@@ -81,6 +151,25 @@ export function renderSettings(container) {
     else localStorage.removeItem('user_xai_api_key');
     localStorage.setItem('gemini_model', document.getElementById('gemini-model').value);
     localStorage.setItem('grok_vision_model', document.getElementById('grok-model').value);
+
+    const orKeyVal = document.getElementById('or-key')?.value.trim() || '';
+    const orPresetVal = document.getElementById('or-preset')?.value || 'openrouter';
+    const preset = getAggregatorPreset(orPresetVal);
+    const orBaseVal = (document.getElementById('or-base')?.value.trim() || preset.baseUrl || 'https://openrouter.ai/api/v1');
+    const orModelVal = document.getElementById('or-model')?.value.trim() || preset.defaultModel || 'google/gemini-2.0-flash-001';
+    localStorage.setItem('aggregator_preset', orPresetVal);
+    if (orKeyVal) {
+      localStorage.setItem('user_aggregator_api_key', orKeyVal);
+      localStorage.setItem('user_openrouter_api_key', orKeyVal); // legacy alias
+    } else {
+      localStorage.removeItem('user_aggregator_api_key');
+      localStorage.removeItem('user_openrouter_api_key');
+    }
+    localStorage.setItem('aggregator_base_url', orBaseVal);
+    localStorage.setItem('aggregator_model', orModelVal);
+    localStorage.setItem('openrouter_base_url', orBaseVal);
+    localStorage.setItem('openrouter_model', orModelVal);
+
     showToast('設定已儲存', 'success');
   });
 
@@ -154,5 +243,72 @@ async function loadGeminiModels(userKey, selectedId) {
     if (status) status.textContent = `已載入 ${models.length} 個模型`;
   } catch {
     if (status) status.textContent = '載入失敗，用後備列表';
+  }
+}
+
+
+async function loadAggregatorModels(userKey, baseUrl, selectedId) {
+  const status = document.getElementById('agg-models-status');
+  const select = document.getElementById('or-model');
+  if (!select) return;
+
+  if (!userKey) {
+    if (status) status.textContent = '請先填 Aggregator API Key，再重新整理列表';
+    return;
+  }
+  if (status) status.textContent = '載入模型中…';
+
+  try {
+    const res = await fetch('/api/openai-compatible', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'list-models',
+        userApiKey: userKey,
+        baseUrl: baseUrl || 'https://openrouter.ai/api/v1'
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+    const models = data.models || [];
+    const vision = data.visionModels || models.filter(m => m.isVision);
+    select.innerHTML = '';
+
+    const addGroup = (label, list) => {
+      if (!list.length) return;
+      const og = document.createElement('optgroup');
+      og.label = label;
+      list.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.isVision ? `👁 ${m.id}` : m.id;
+        og.appendChild(opt);
+      });
+      select.appendChild(og);
+    };
+
+    addGroup('Vision 模型（建議）', vision);
+    addGroup('其他模型', models.filter(m => !m.isVision));
+
+    if (selectedId && [...select.options].some(o => o.value === selectedId)) {
+      select.value = selectedId;
+    } else if (vision[0]) {
+      select.value = vision[0].id;
+    }
+
+    if (status) {
+      status.textContent = `已載入 ${models.length} 個模型（Vision ${vision.length}）`;
+    }
+  } catch (err) {
+    if (status) status.textContent = '載入失敗：' + err.message + '（仍可手動用而家選項）';
+    // keep existing option
+    if (selectedId && ![...select.options].some(o => o.value === selectedId)) {
+      const opt = document.createElement('option');
+      opt.value = selectedId;
+      opt.textContent = selectedId;
+      select.appendChild(opt);
+      select.value = selectedId;
+    }
   }
 }

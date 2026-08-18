@@ -1,10 +1,17 @@
 import { applyCors, rejectCors } from '../lib/cors.js';
+import { rateLimit, clientKey } from '../lib/rate-limit.js';
 
 // Vercel Serverless Function: /api/models
 // Dynamically list Gemini models available to the API key
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) return rejectCors(res);
+
+  const rl = rateLimit('api:' + clientKey(req), { limit: 40, windowMs: 60_000 });
+  if (!rl.ok) {
+    res.setHeader('Retry-After', String(rl.retryAfterSec || 60));
+    return res.status(429).json({ error: '請求過於頻密，請稍後再試', retryAfterSec: rl.retryAfterSec });
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
