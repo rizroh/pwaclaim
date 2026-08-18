@@ -76,8 +76,11 @@ export async function importAllData(payload) {
   if (typeof payload === 'string') data = JSON.parse(payload);
   const list = Array.isArray(data) ? data : (data.expenses || []);
   if (!Array.isArray(list)) throw new Error('匯入格式不正確');
-  await saveExpenses(list);
-  return list.length;
+  // basic shape check — skip junk rows
+  const cleaned = list.filter(e => e && typeof e === 'object' && e.date && e.vendor != null);
+  if (cleaned.length === 0) throw new Error('檔案內冇有效開支記錄');
+  await saveExpenses(cleaned);
+  return cleaned.length;
 }
 
 export async function clearAllData() {
