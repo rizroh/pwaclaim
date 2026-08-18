@@ -4,13 +4,14 @@
 
 import { showToast } from '../ui/toast.js';
 import { runAnalyzeMultiple } from './analyze-multiple.js';
+import { API_HEADERS } from './api-headers.js';
 
 async function fetchGrokWithRetry(imageBase64, model, userApiKey, retries = 3) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch('/api/grok-vision', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: API_HEADERS,
       body: JSON.stringify({ imageBase64, userApiKey, model })
     });
     const data = await res.json().catch(() => ({}));

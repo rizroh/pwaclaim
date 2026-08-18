@@ -16,7 +16,7 @@ import {
   handleFiles,
   renderPreviews
 } from './add-expense-media.js';
-import { providerButtonsHtml, bindAnalyzeButtons } from './add-expense-analyze.js';
+import { providerButtonsHtml, bindAnalyzeButtons, fillForm } from './add-expense-analyze.js';
 
 export function renderAddExpense(container) {
   migrateAggregatorKeys();
@@ -121,7 +121,14 @@ export function renderAddExpense(container) {
   document.getElementById('btn-save')?.addEventListener('click', save);
   bindAnalyzeButtons();
 
-  document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  const existing = isEdit
+    ? state.expenses.find((e) => e.id === state.editingId)
+    : null;
+  if (existing) {
+    fillForm(existing);
+  } else {
+    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  }
   renderPreviews();
 }
 

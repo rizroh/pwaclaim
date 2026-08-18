@@ -3,7 +3,8 @@
  */
 
 import { showToast } from './toast.js';
-import { exportAllData, importAllData, clearAllData, loadExpenses } from '../services/storage.js';
+import { exportAllData, importAllData, clearAllData, loadExpenses, IMPORT_LIMITS } from '../services/storage.js';
+import { API_HEADERS } from '../services/api-headers.js';
 import { state, setState } from '../state.js';
 import { AGGREGATOR_PRESETS, listAggregatorPresets, getAggregatorPreset, matchPresetByBaseUrl } from '../services/aggregator-presets.js';
 
@@ -115,8 +116,7 @@ export function renderSettings(container) {
     const baseEl = document.getElementById('or-base');
     const keyEl = document.getElementById('or-key');
     if (baseEl && preset.baseUrl) baseEl.value = preset.baseUrl;
-    if (baseEl && id === 'custom' && !baseEl.value) baseEl.readOnly = false;
-    if (baseEl) baseEl.readOnly = id !== 'custom';
+    if (baseEl) baseEl.readOnly = true;
     if (keyEl && preset.keyPlaceholder) keyEl.placeholder = preset.keyPlaceholder;
     if (preset.defaultModel) {
       const sel = document.getElementById('or-model');
@@ -132,7 +132,7 @@ export function renderSettings(container) {
   // lock base url for non-custom
   const initPreset = document.getElementById('or-preset')?.value || 'openrouter';
   const baseEl0 = document.getElementById('or-base');
-  if (baseEl0) baseEl0.readOnly = initPreset !== 'custom';
+  if (baseEl0) baseEl0.readOnly = true;
 
   document.getElementById('btn-refresh-agg-models')?.addEventListener('click', () => {
     loadAggregatorModels(
@@ -192,8 +192,11 @@ export function renderSettings(container) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      if (file.size > IMPORT_LIMITS.maxBytes) {
+        throw new Error('檔案太大（上限 15MB）');
+      }
       const text = await file.text();
-      const n = await importAllData(text);
+      const n = await importAllData(text, { byteLength: file.size });
       state.expenses = await loadExpenses();
       setState({ expenses: state.expenses });
       showToast(`已匯入 ${n} 筆開支`, 'success');
@@ -220,7 +223,7 @@ async function loadGeminiModels(userKey, selectedId) {
   try {
     const res = await fetch('/api/models', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: API_HEADERS,
       body: JSON.stringify({ userApiKey: userKey || '' })
     });
     const data = await res.json().catch(() => ({}));
@@ -261,7 +264,7 @@ async function loadAggregatorModels(userKey, baseUrl, selectedId) {
   try {
     const res = await fetch('/api/openai-compatible', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: API_HEADERS,
       body: JSON.stringify({
         action: 'list-models',
         userApiKey: userKey,

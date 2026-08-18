@@ -119,18 +119,6 @@ export function renderDashboard(container) {
       if (!exp) return;
       setState({ editingId: id, currentImages: Array.isArray(exp.images) ? [...exp.images] : [] });
       switchView('add');
-      setTimeout(() => {
-        const d = document.getElementById('f-date');
-        const a = document.getElementById('f-amount');
-        const v = document.getElementById('f-vendor');
-        const c = document.getElementById('f-category');
-        const n = document.getElementById('f-notes');
-        if (d) d.value = exp.date || '';
-        if (a) a.value = exp.amount != null ? Number(exp.amount) : '';
-        if (v) v.value = exp.vendor || '';
-        if (c && exp.category) c.value = exp.category;
-        if (n) n.value = exp.notes || '';
-      }, 60);
     });
   });
 
@@ -154,14 +142,15 @@ function renderEmpty(noData) {
 function renderCard(e) {
   const amount = Number(e.amount) || 0;
   const imgN = (e.images && e.images.length) ? ' · 📷 ' + e.images.length : '';
-  return '<div data-edit="'+e.id+'" class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex items-start gap-3 active:bg-slate-50 cursor-pointer">' +
+  const safeId = escapeHtml(e.id);
+  return '<div data-edit="'+safeId+'" class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex items-start gap-3 active:bg-slate-50 cursor-pointer">' +
     '<div class="flex-1 min-w-0"><div class="flex items-center justify-between gap-2">' +
     '<p class="font-medium text-sm truncate">'+escapeHtml(e.vendor || '未知商戶')+'</p>' +
     '<p class="font-semibold text-sm tabular-nums">HK$'+amount.toFixed(2)+'</p></div>' +
     '<div class="text-[11px] text-slate-500 mt-1">'+escapeHtml(e.date || '')+' · '+escapeHtml(e.category || '')+imgN+'</div>' +
     (e.notes ? '<p class="text-[11px] text-slate-400 mt-1 truncate">'+escapeHtml(e.notes)+'</p>' : '') +
     '<p class="text-[10px] text-primary-600 mt-1">點擊編輯</p></div>' +
-    '<button data-delete="'+e.id+'" class="shrink-0 w-8 h-8 rounded-full bg-red-50 text-red-500">🗑</button></div>';
+    '<button data-delete="'+safeId+'" class="shrink-0 w-8 h-8 rounded-full bg-red-50 text-red-500">🗑</button></div>';
 }
 
 function escapeHtml(str) {

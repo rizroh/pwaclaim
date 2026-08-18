@@ -4,6 +4,7 @@
 
 import { showToast } from '../ui/toast.js';
 import { runAnalyzeMultiple } from './analyze-multiple.js';
+import { API_HEADERS } from './api-headers.js';
 
 async function fetchWithRetry(url, options, { retries = 3, baseDelay = 2000 } = {}) {
   let lastErr;
@@ -32,7 +33,7 @@ async function fetchWithRetry(url, options, { retries = 3, baseDelay = 2000 } = 
 export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemini-3.5-flash-lite') {
   const { data } = await fetchWithRetry('/api/gemini', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: API_HEADERS,
     body: JSON.stringify({
       action: 'analyze-receipt',
       imageBase64,
@@ -43,13 +44,23 @@ export async function analyzeReceipt(imageBase64, userApiKey = '', model = 'gemi
   return data.data;
 }
 
+function expensesForSummary(expenses) {
+  return (Array.isArray(expenses) ? expenses : []).slice(0, 80).map((e) => ({
+    date: e.date || '',
+    vendor: e.vendor || '',
+    category: e.category || '',
+    amount: Number(e.amount) || 0,
+    notes: String(e.notes || '').slice(0, 80)
+  }));
+}
+
 export async function generateSummary(expenses, userApiKey = '', model = 'gemini-3.5-flash-lite') {
   const { data } = await fetchWithRetry('/api/gemini', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: API_HEADERS,
     body: JSON.stringify({
       action: 'generate-summary',
-      expenses,
+      expenses: expensesForSummary(expenses),
       userApiKey,
       model
     })

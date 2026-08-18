@@ -4,6 +4,8 @@
 
 import { showToast } from '../ui/toast.js';
 import { runAnalyzeMultiple } from './analyze-multiple.js';
+import { API_HEADERS } from './api-headers.js';
+import { isAllowedAggregatorBase } from '../../lib/aggregator-allowlist.js';
 
 function getConfig() {
   const userApiKey =
@@ -14,10 +16,13 @@ function getConfig() {
     localStorage.getItem('aggregator_model') ||
     localStorage.getItem('openrouter_model') ||
     'google/gemini-2.0-flash-001';
-  const baseUrl =
+  let baseUrl =
     localStorage.getItem('aggregator_base_url') ||
     localStorage.getItem('openrouter_base_url') ||
     'https://openrouter.ai/api/v1';
+  if (!isAllowedAggregatorBase(baseUrl)) {
+    baseUrl = 'https://openrouter.ai/api/v1';
+  }
   return { userApiKey, model, baseUrl };
 }
 
@@ -26,7 +31,7 @@ async function fetchCompat(body, { retries = 2 } = {}) {
   for (let i = 0; i <= retries; i++) {
     const res = await fetch('/api/openai-compatible', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: API_HEADERS,
       body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));

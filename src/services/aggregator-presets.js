@@ -30,13 +30,6 @@ export const AGGREGATOR_PRESETS = {
     defaultModel: 'kimi-k2.5',
     keyPlaceholder: 'OpenCode Console API Key'
   },
-  custom: {
-    id: 'custom',
-    label: 'Custom（自訂 Base URL）',
-    baseUrl: '',
-    defaultModel: '',
-    keyPlaceholder: 'API Key'
-  }
 };
 
 export function listAggregatorPresets() {
@@ -53,5 +46,5 @@ export function matchPresetByBaseUrl(baseUrl) {
     if (p.id === 'custom') continue;
     if (p.baseUrl.replace(/\/+$/, '') === u) return p.id;
   }
-  return u ? 'custom' : 'openrouter';
+  return 'openrouter';
 }

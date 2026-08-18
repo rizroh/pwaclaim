@@ -8,17 +8,20 @@ import { performLocalOCR } from '../services/ocr.js';
 import { getProvider, listProviders } from '../services/providers.js';
 import { renderPreviews } from './add-expense-media.js';
 
-function fillForm(result) {
+export function fillForm(result) {
+  if (!result || typeof result !== 'object') return;
   const a = document.getElementById('f-amount');
   const d = document.getElementById('f-date');
   const v = document.getElementById('f-vendor');
   const c = document.getElementById('f-category');
   const n = document.getElementById('f-notes');
-  if (a && result.amount != null) a.value = Number(result.amount).toFixed(2);
-  if (d && result.date) d.value = result.date;
-  if (v && result.vendor) v.value = result.vendor;
+  const amt = Number(result.amount);
+  if (a && Number.isFinite(amt) && amt > 0) a.value = amt.toFixed(2);
+  const date = String(result.date || '').slice(0, 10);
+  if (d && /^\d{4}-\d{2}-\d{2}$/.test(date)) d.value = date;
+  if (v && result.vendor) v.value = String(result.vendor).slice(0, 200);
   if (c && result.category) c.value = result.category;
-  if (n && result.notes) n.value = result.notes;
+  if (n && result.notes) n.value = String(result.notes).slice(0, 500);
 }
 
 function renderProgress(meta) {
@@ -46,10 +49,9 @@ export async function runOCR() {
   const original = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = '🤖 OCR 中…'; }
   try {
-    const text = await performLocalOCR(state.currentImages[0]);
-    const notes = document.getElementById('f-notes');
-    if (notes && text) notes.value = (notes.value ? notes.value + '\n' : '') + text.slice(0, 500);
-    showToast('OCR 完成（已填入備註）', 'success');
+    const parsed = await performLocalOCR(state.currentImages[0]);
+    fillForm(parsed);
+    showToast('OCR 完成（已填入表格）', 'success');
   } catch (err) {
     showToast('OCR 失敗：' + err.message, 'error');
   } finally {

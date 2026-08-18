@@ -1,8 +1,9 @@
 // Vercel: /api/openai-compatible
 // OpenRouter / Together / Fireworks / any OpenAI-compatible chat+vision
 
-import { applyCors, rejectCors } from '../lib/cors.js';
+import { applyCors, rejectCors, requireClient } from '../lib/cors.js';
 import { rateLimit, clientKey } from '../lib/rate-limit.js';
+import { isAllowedAggregatorBase, normalizeAggregatorBase } from '../lib/aggregator-allowlist.js';
 
 export const config = {
   api: {
@@ -14,6 +15,7 @@ const DEFAULT_BASE = 'https://openrouter.ai/api/v1';
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) return rejectCors(res);
+  if (req.method !== 'OPTIONS' && !requireClient(req, res)) return;
 
   const rl = rateLimit('api:' + clientKey(req), { limit: 40, windowMs: 60_000 });
   if (!rl.ok) {
@@ -51,10 +53,13 @@ export default async function handler(req, res) {
       });
     }
 
-    let base = (requestedBase && String(requestedBase).trim()) || process.env.LLM_BASE_URL || DEFAULT_BASE;
-    base = base.replace(/\/+$/, '');
-    if (!/^https:\/\//i.test(base)) {
-      return res.status(400).json({ error: 'Base URL 必須係 https://' });
+    let base = normalizeAggregatorBase(
+      (requestedBase && String(requestedBase).trim()) || process.env.LLM_BASE_URL || DEFAULT_BASE
+    );
+    if (!isAllowedAggregatorBase(base)) {
+      return res.status(400).json({
+        error: 'Base URL 唔喺允許名單（只准 OpenRouter / Together / Fireworks / OpenCode）'
+      });
     }
 
     const model = (requestedModel && String(requestedModel).trim()) || 'google/gemini-2.0-flash-001';

@@ -1,4 +1,4 @@
-import { applyCors, rejectCors } from '../lib/cors.js';
+import { applyCors, rejectCors, requireClient } from '../lib/cors.js';
 import { rateLimit, clientKey } from '../lib/rate-limit.js';
 
 // Vercel Serverless Function: /api/gemini
@@ -14,6 +14,7 @@ export const config = {
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) return rejectCors(res);
+  if (req.method !== 'OPTIONS' && !requireClient(req, res)) return;
 
   const rl = rateLimit('api:' + clientKey(req), { limit: 40, windowMs: 60_000 });
   if (!rl.ok) {
@@ -159,6 +160,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: '沒有開支資料' });
       }
 
+      const slim = expenses.slice(0, 80).map((e) => ({
+        date: e?.date || '',
+        vendor: String(e?.vendor || '').slice(0, 80),
+        category: e?.category || '',
+        amount: Number(e?.amount) || 0,
+        notes: String(e?.notes || '').slice(0, 80)
+      }));
+
       const summaryPrompt = `你是香港公司的財務助理。請根據以下開支資料，用「繁體中文 + 英文」生成一份簡潔專業的月結報告（150-250字）。
 
 要求：
@@ -168,7 +177,7 @@ export default async function handler(req, res) {
 - 用專業但易讀的語氣
 
 開支資料：
-${JSON.stringify(expenses, null, 2)}`;
+${JSON.stringify(slim, null, 2)}`;
 
       const payload = {
         contents: [{ parts: [{ text: summaryPrompt }] }],

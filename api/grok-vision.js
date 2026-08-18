@@ -1,7 +1,7 @@
 // Vercel Serverless: /api/grok-vision
 // API Key only (user key or XAI_API_KEY) — OAuth removed
 
-import { applyCors, rejectCors } from '../lib/cors.js';
+import { applyCors, rejectCors, requireClient } from '../lib/cors.js';
 import { rateLimit, clientKey } from '../lib/rate-limit.js';
 
 export const config = {
@@ -14,6 +14,7 @@ export const config = {
 
 export default async function handler(req, res) {
   if (!applyCors(req, res)) return rejectCors(res);
+  if (req.method !== 'OPTIONS' && !requireClient(req, res)) return;
 
   const rl = rateLimit('api:' + clientKey(req), { limit: 40, windowMs: 60_000 });
   if (!rl.ok) {
