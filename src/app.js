@@ -96,9 +96,10 @@ export function showReportModal(text) {
   root.appendChild(overlay);
 }
 
-export function showPdfPreview(url) {
-  if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+export function showPdfPreview(url, blob, filename) {
+  if (pdfObjectUrl && pdfObjectUrl !== url) URL.revokeObjectURL(pdfObjectUrl);
   pdfObjectUrl = url;
+  const name = filename || `pwaclaim-${new Date().toISOString().slice(0, 10)}.pdf`;
   const root = document.getElementById('modal-root');
   if (!root) {
     window.open(url, '_blank');
@@ -108,24 +109,45 @@ export function showPdfPreview(url) {
   const overlay = document.createElement('div');
   overlay.className = 'fixed inset-0 z-[90] bg-black/50 flex flex-col';
   const bar = document.createElement('div');
-  bar.className = 'flex items-center justify-between px-4 py-3 bg-white';
+  bar.className = 'flex items-center justify-between px-4 py-3 bg-white gap-2';
   const title = document.createElement('p');
   title.className = 'font-medium text-sm';
   title.textContent = 'PDF 預覽';
   const actions = document.createElement('div');
   actions.className = 'flex gap-2';
-  const dl = document.createElement('a');
-  dl.href = url;
-  dl.download = `pwaclaim-${new Date().toISOString().slice(0, 10)}.pdf`;
-  dl.className = 'px-3 py-1.5 rounded-xl bg-primary-800 text-white text-sm';
-  dl.textContent = '下載';
+
+  const share = document.createElement('button');
+  share.type = 'button';
+  share.className = 'px-3 py-1.5 rounded-xl bg-primary-800 text-white text-sm';
+  share.textContent = '分享 / 下載';
+  share.addEventListener('click', async () => {
+    try {
+      const fileBlob = blob || await fetch(url).then((r) => r.blob());
+      const file = new File([fileBlob], name, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: name });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'px-3 py-1.5 rounded-xl border text-sm';
   close.textContent = '關閉';
   close.addEventListener('click', () => { root.innerHTML = ''; });
-  actions.append(dl, close);
+  actions.append(share, close);
   bar.append(title, actions);
+
   const frame = document.createElement('iframe');
   frame.src = url;
   frame.className = 'flex-1 w-full bg-slate-200';
